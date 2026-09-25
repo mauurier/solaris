@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Solaris usa la cámara para tomar la evidencia fotográfica y los videos del levantamiento.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>El video del recorrido general se graba con audio para narrar la trayectoria del cableado.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Solaris registra las coordenadas al iniciar y cerrar la visita y las imprime en cada fotografía.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Permite importar fotos y videos del dron o capturas de mapa como evidencia del levantamiento.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

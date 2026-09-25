@@ -279,93 +279,6 @@ class Mock {
 
   static Project get active => projects.first;
 
-  static List<SurveySection> sections() => [
-        SurveySection(
-          code: '01',
-          title: 'Información del Sitio',
-          subtitle: 'Datos generales y condiciones',
-          icon: Icons.apartment_rounded,
-          color: AppColors.blue,
-          done: 14,
-          total: 14,
-          route: 'form',
-        ),
-        SurveySection(
-          code: '02',
-          title: 'Documentación Existente',
-          subtitle: 'Recibo CFE, unifilar, planos',
-          icon: Icons.folder_copy_rounded,
-          color: AppColors.violet,
-          done: 4,
-          total: 5,
-          route: 'docs',
-          requiredPending: 1,
-        ),
-        SurveySection(
-          code: '03',
-          title: 'Fotografías',
-          subtitle: '5 subsecciones · 24 evidencias',
-          icon: Icons.photo_camera_rounded,
-          color: AppColors.accent,
-          done: 22,
-          total: 24,
-          route: 'photos',
-          requiredPending: 2,
-        ),
-        SurveySection(
-          code: '04',
-          title: 'Videos',
-          subtitle: 'Recorrido general y vuelo de dron',
-          icon: Icons.videocam_rounded,
-          color: AppColors.teal,
-          done: 2,
-          total: 2,
-          route: 'videos',
-        ),
-        SurveySection(
-          code: '05',
-          title: 'Mediciones Eléctricas',
-          subtitle: 'Tensión, corriente y parámetros',
-          icon: Icons.electric_bolt_rounded,
-          color: AppColors.warning,
-          done: 11,
-          total: 13,
-          route: 'measure',
-          requiredPending: 1,
-        ),
-        SurveySection(
-          code: '06',
-          title: 'Equipos',
-          subtitle: 'Transformadores, tableros, inversores',
-          icon: Icons.precision_manufacturing_rounded,
-          color: AppColors.blue,
-          done: 7,
-          total: 8,
-          route: 'equipment',
-          requiredPending: 1,
-        ),
-        SurveySection(
-          code: '07',
-          title: 'Hallazgos',
-          subtitle: '5 registrados · 2 críticos',
-          icon: Icons.report_problem_rounded,
-          color: AppColors.danger,
-          done: 5,
-          total: 5,
-          route: 'findings',
-        ),
-        SurveySection(
-          code: '08',
-          title: 'Observaciones y Firma',
-          subtitle: 'Notas finales y cierre de visita',
-          icon: Icons.draw_rounded,
-          color: AppColors.success,
-          done: 1,
-          total: 2,
-          route: 'notes',
-        ),
-      ];
-
   static List<PhotoGroup> photoGroups() => [
         PhotoGroup(code: '3.1', title: 'Dron y Cubierta', icon: Icons.flight_rounded, slots: [
           PhotoSlot(title: 'Vista aérea general', code: 'DRON_GENERAL_001', isRequired: true, captured: true, time: '09:12'),
@@ -491,51 +404,6 @@ class Mock {
     ),
   ];
 
-  static final documents = <DocItem>[
-    DocItem(name: 'RECIBO_CFE_TRUPER_MONTERREY', category: 'Recibo CFE', size: '1.4 MB', ext: 'pdf', date: '16 Ago · 08:55'),
-    DocItem(name: 'DIAGRAMA_UNIFILAR_TRUPER_MTY', category: 'Diagrama unifilar', size: '820 KB', ext: 'dwg', date: '16 Ago · 09:02'),
-    DocItem(name: 'PLANO_ARQUITECTONICO_CEDIS', category: 'Plano arquitectónico', size: '3.1 MB', ext: 'pdf', date: '16 Ago · 09:04'),
-    DocItem(name: 'MEMORIA_CALCULO_2024', category: 'Memoria de cálculo', size: '640 KB', ext: 'xlsx', date: '16 Ago · 09:06'),
-    DocItem(name: 'TERMOGRAFIA_TABLERO_PRINCIPAL', category: 'Cámara térmica', size: '2.2 MB', ext: 'jpg', date: '16 Ago · 11:12'),
-  ];
-
-  static const requiredDocs = <String>[
-    'Recibo CFE',
-    'Diagrama unifilar',
-    'Plano arquitectónico',
-    'Memoria de cálculo',
-    'Plano estructural',
-  ];
-
-  static final videos = <VideoItem>[
-    VideoItem(
-      title: 'RECORRIDO_GENERAL_001',
-      type: 'Recorrido general',
-      duration: '04:32',
-      size: '186 MB',
-      time: '16 Ago · 12:15',
-      description: 'Desde punto de interconexión hacia naves A, B y C.',
-      uploaded: true,
-    ),
-    VideoItem(
-      title: 'VUELO_DRON_001',
-      type: 'Vuelo de dron',
-      duration: '02:48',
-      size: '243 MB',
-      time: '16 Ago · 09:10',
-      description: 'Vuelo perimetral y cenital de cubierta.',
-    ),
-  ];
-
-  static final pendings = <PendingItem>[
-    PendingItem(title: 'Falta fotografía de placa del transformador 01', section: '03 Fotografías · 3.3', blocking: true),
-    PendingItem(title: 'Falta fotografía del Tablero 03 (frente)', section: '03 Fotografías · 3.4', blocking: true),
-    PendingItem(title: 'Falta medición Fase-Tierra en Tablero Principal', section: '05 Mediciones', blocking: true),
-    PendingItem(title: 'Falta número de serie del Tablero 03', section: '06 Equipos', blocking: false),
-    PendingItem(title: 'Falta plano estructural', section: '02 Documentación', blocking: false),
-    PendingItem(title: 'Observaciones finales sin capturar', section: '08 Observaciones', blocking: false),
-  ];
-
   static final syncQueue = <SyncItem>[
     SyncItem(name: 'TABLERO_PRINCIPAL_TERMO_003.jpg', kind: 'Fotografía', size: '4.2 MB', progress: 1.0, state: 'listo'),
     SyncItem(name: 'RECORRIDO_GENERAL_001.mp4', kind: 'Video', size: '186 MB', progress: 0.42, state: 'sincronizando'),
@@ -573,48 +441,6 @@ class Mock {
     Client(name: 'CEMEX', rfc: 'CEM060215RT8', projects: 5, contact: 'Ing. Hugo Bautista'),
     Client(name: 'FEMSA', rfc: 'FEM880912LP0', projects: 9, contact: 'Ing. Mariana Cruz'),
     Client(name: 'HEB México', rfc: 'HEB970430MN2', projects: 3, contact: 'Ing. Óscar Domínguez'),
-  ];
-
-  static const templates = <SurveyTemplate>[
-    SurveyTemplate(
-      name: 'Levantamiento eléctrico FV',
-      version: 'v2.3',
-      type: 'Viabilidad fotovoltaica',
-      updated: '12 Ago 2026',
-      sections: [
-        TemplateSection(code: '01', title: 'Información del Sitio', questions: 14, evidences: 2),
-        TemplateSection(code: '02', title: 'Documentación Existente', questions: 5, evidences: 5),
-        TemplateSection(code: '03', title: 'Fotografías', questions: 0, evidences: 24),
-        TemplateSection(code: '04', title: 'Videos', questions: 2, evidences: 2),
-        TemplateSection(code: '05', title: 'Mediciones Eléctricas', questions: 13, evidences: 4),
-        TemplateSection(code: '06', title: 'Equipos', questions: 10, evidences: 8),
-        TemplateSection(code: '07', title: 'Hallazgos', questions: 0, evidences: 0),
-        TemplateSection(code: '08', title: 'Observaciones y Firma', questions: 2, evidences: 1),
-      ],
-    ),
-    SurveyTemplate(
-      name: 'Auditoría de sistema FV existente',
-      version: 'v1.4',
-      type: 'Auditoría',
-      updated: '30 Jul 2026',
-      sections: [
-        TemplateSection(code: '01', title: 'Datos del sistema', questions: 18, evidences: 4),
-        TemplateSection(code: '02', title: 'Módulos y estructura', questions: 12, evidences: 10),
-        TemplateSection(code: '03', title: 'Inversores', questions: 9, evidences: 6),
-        TemplateSection(code: '04', title: 'Termografía', questions: 4, evidences: 12),
-      ],
-    ),
-    SurveyTemplate(
-      name: 'Mantenimiento preventivo',
-      version: 'v1.0',
-      type: 'Mantenimiento',
-      updated: '05 Jun 2026',
-      active: false,
-      sections: [
-        TemplateSection(code: '01', title: 'Checklist preventivo', questions: 22, evidences: 8),
-        TemplateSection(code: '02', title: 'Limpieza de módulos', questions: 6, evidences: 4),
-      ],
-    ),
   ];
 
   static const folderTree = <(int, String, String)>[

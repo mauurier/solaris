@@ -231,33 +231,6 @@ class Visit {
   final String locationEnd;
 }
 
-class SurveySection {
-  SurveySection({
-    required this.code,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.done,
-    required this.total,
-    required this.route,
-    this.requiredPending = 0,
-  });
-
-  final String code;
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  int done;
-  final int total;
-  final String route;
-  final int requiredPending;
-
-  double get progress => total == 0 ? 0 : done / total;
-  bool get complete => done >= total;
-}
-
 class PhotoSlot {
   PhotoSlot({
     required this.title,
@@ -359,59 +332,6 @@ class Finding {
   final int evidences;
 }
 
-class DocItem {
-  DocItem({
-    required this.name,
-    required this.category,
-    required this.size,
-    required this.ext,
-    required this.date,
-    this.pending = false,
-  });
-  final String name;
-  final String category;
-  final String size;
-  final String ext;
-  final String date;
-  final bool pending;
-
-  Color get color => switch (ext.toLowerCase()) {
-        'pdf' => AppColors.danger,
-        'dwg' || 'dxf' => AppColors.violet,
-        'xlsx' || 'xls' => AppColors.success,
-        'docx' || 'doc' => AppColors.blue,
-        'jpg' || 'png' => AppColors.teal,
-        _ => AppColors.textMuted,
-      };
-}
-
-class VideoItem {
-  VideoItem({
-    required this.title,
-    required this.type,
-    required this.duration,
-    required this.size,
-    required this.time,
-    required this.description,
-    this.uploaded = false,
-  });
-  final String title;
-  final String type;
-  final String duration;
-  final String size;
-  final String time;
-  final String description;
-  final bool uploaded;
-}
-
-class PendingItem {
-  PendingItem({required this.title, required this.section, required this.blocking, this.justified = false});
-  final String title;
-  final String section;
-  final bool blocking;
-  bool justified;
-}
-
 class SyncItem {
   SyncItem({
     required this.name,
@@ -444,27 +364,3 @@ class HistoryEvent {
   final Color color;
 }
 
-class TemplateSection {
-  const TemplateSection({required this.code, required this.title, required this.questions, required this.evidences});
-  final String code;
-  final String title;
-  final int questions;
-  final int evidences;
-}
-
-class SurveyTemplate {
-  const SurveyTemplate({
-    required this.name,
-    required this.version,
-    required this.type,
-    required this.sections,
-    required this.updated,
-    this.active = true,
-  });
-  final String name;
-  final String version;
-  final String type;
-  final List<TemplateSection> sections;
-  final String updated;
-  final bool active;
-}

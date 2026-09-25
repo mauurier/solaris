@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:proyecto_app/data/mock_data.dart';
+import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/main.dart';
+
+import 'test_helpers.dart';
 
 /// El font de pruebas ("Ahem") dibuja cada carácter como un cuadro del tamaño
 /// completo de la fuente, por lo que los textos miden 2–3 veces más que en el
@@ -27,24 +31,30 @@ Future<void> _pumpApp(WidgetTester tester) async {
 }
 
 void main() {
+  setUp(() => AppState.instance.setRole(UserRole.tecnico));
+
   testWidgets('La pantalla de acceso se muestra al iniciar', (tester) async {
+    await initTestStore();
     await _pumpApp(tester);
 
     expect(find.text('SOLARIS'), findsOneWidget);
     expect(find.text('Iniciar sesión'), findsOneWidget);
   });
 
-  testWidgets('Al iniciar sesión se abre el panel principal', (tester) async {
+  testWidgets('Sin proyectos, el técnico ve que no tiene visitas', (tester) async {
+    await initTestStore();
     await _pumpApp(tester);
 
     await tester.tap(find.text('Iniciar sesión'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Hola,'), findsOneWidget);
-    expect(find.text('VISITA EN CURSO'), findsOneWidget);
+    expect(find.text('Sin visitas pendientes'), findsOneWidget);
   });
 
   testWidgets('El flujo de levantamiento abre sus secciones', (tester) async {
+    final store = await initTestStore();
+    await seedProject(store, start: true);
     await _pumpApp(tester);
 
     await tester.tap(find.text('Iniciar sesión'));
@@ -54,16 +64,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('LEVANTAMIENTO'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Fotografías'));
+    await tester.tap(find.text('Subestación'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Fotografías'));
-    await tester.pumpAndSettle();
-    expect(find.text('03 Fotografías'), findsOneWidget);
-    expect(find.text('3.1 Dron y Cubierta'), findsOneWidget);
+    expect(find.text('2. Subestación'), findsOneWidget);
+    expect(find.text('Transformador 1'), findsOneWidget);
   });
 
-  testWidgets('La validación bloquea el cierre con pendientes obligatorios',
-      (tester) async {
+  testWidgets('La validación bloquea el cierre con pendientes obligatorios', (tester) async {
+    final store = await initTestStore();
+    await seedProject(store, start: true);
     await _pumpApp(tester);
 
     await tester.tap(find.text('Iniciar sesión'));
@@ -74,7 +83,7 @@ void main() {
     await tester.tap(find.text('Validar y finalizar'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Faltan datos obligatorios'), findsOneWidget);
-    expect(find.text('Pendientes obligatorios (3)'.toUpperCase()), findsOneWidget);
+    expect(find.text('Aún no se puede cerrar'), findsOneWidget);
+    expect(find.textContaining('PENDIENTES OBLIGATORIOS'), findsOneWidget);
   });
 }

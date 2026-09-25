@@ -974,3 +974,127 @@ class SegmentedPicker extends StatelessWidget {
     );
   }
 }
+
+/// Aviso informativo con icono (sólo lectura, advertencias, confirmaciones).
+class InfoBanner extends StatelessWidget {
+  const InfoBanner(this.text, {super.key, this.icon = Icons.info_outline_rounded, this.color = AppColors.blue});
+  final String text;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 8),
+          Expanded(child: Text(text, style: T.tiny.copyWith(color: color))),
+        ],
+      ),
+    );
+  }
+}
+
+/// Diálogo con un campo de texto. Devuelve el texto al confirmar (puede ser
+/// vacío) o `null` al cancelar. El diálogo es dueño de su controlador, así no
+/// se libera mientras la animación de cierre todavía lo usa.
+Future<String?> showTextPrompt(
+  BuildContext context, {
+  required String title,
+  String message = '',
+  String hint = '',
+  String initial = '',
+  String confirm = 'Aceptar',
+  String cancel = 'Cancelar',
+  int maxLines = 1,
+  bool requireText = false,
+}) {
+  return showDialog<String>(
+    context: context,
+    builder: (_) => _TextPromptDialog(
+      title: title,
+      message: message,
+      hint: hint,
+      initial: initial,
+      confirm: confirm,
+      cancel: cancel,
+      maxLines: maxLines,
+      requireText: requireText,
+    ),
+  );
+}
+
+class _TextPromptDialog extends StatefulWidget {
+  const _TextPromptDialog({
+    required this.title,
+    required this.message,
+    required this.hint,
+    required this.initial,
+    required this.confirm,
+    required this.cancel,
+    required this.maxLines,
+    required this.requireText,
+  });
+
+  final String title;
+  final String message;
+  final String hint;
+  final String initial;
+  final String confirm;
+  final String cancel;
+  final int maxLines;
+  final bool requireText;
+
+  @override
+  State<_TextPromptDialog> createState() => _TextPromptDialogState();
+}
+
+class _TextPromptDialogState extends State<_TextPromptDialog> {
+  late final _c = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.message.isNotEmpty) ...[
+            Text(widget.message, style: T.small),
+            const SizedBox(height: 12),
+          ],
+          TextField(
+            controller: _c,
+            autofocus: true,
+            maxLines: widget.maxLines,
+            minLines: 1,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(hintText: widget.hint),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(widget.cancel)),
+        TextButton(
+          onPressed: widget.requireText && _c.text.trim().isEmpty ? null : () => Navigator.pop(context, _c.text.trim()),
+          child: Text(widget.confirm),
+        ),
+      ],
+    );
+  }
+}

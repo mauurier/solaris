@@ -1,140 +1,170 @@
 import 'package:flutter/material.dart';
+
+import '../../core/services/formatting.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
-import '../../data/mock_data.dart';
-import '../../data/models.dart';
+import '../../data/survey/template.dart';
+import '../../data/survey_store.dart';
+import '../../main.dart';
 import '../shell/home_shell.dart';
+import 'template_editor_screen.dart';
 
+/// Plantillas de levantamiento configurables por el administrador.
 class TemplatesScreen extends StatelessWidget {
   const TemplatesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return DetailScaffold(
-      title: 'Plantillas',
-      subtitle: '${Mock.templates.length} plantillas configuradas',
-      bottomBar: AppButton(
-        'Nueva plantilla',
-        icon: Icons.add_rounded,
-        expand: true,
-        onPressed: () => showAppSnack(context, 'Editor de plantillas (prototipo)'),
-      ),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
-        children: [
-          GlassCard(
-            color: AppColors.surfaceAlt,
-            child: Row(
-              children: [
-                const IconBadge(Icons.account_tree_rounded, color: AppColors.accent, size: 40),
-                const SizedBox(width: 13),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Estructura de una plantilla', style: T.h3),
-                      const SizedBox(height: 5),
-                      Text('Plantilla › Secciones › Subsecciones › Preguntas › Evidencias › Validaciones',
-                          style: T.tiny),
-                    ],
-                  ),
-                ),
+    final store = SurveyStore.instance;
+    return ListenableBuilder(
+      listenable: store,
+      builder: (context, _) => DetailScaffold(
+        title: 'Plantillas',
+        subtitle: '${store.templates.length} configuradas · ${store.activeTemplates.length} activas',
+        bottomBar: AppButton(
+          'Nueva plantilla',
+          icon: Icons.add_rounded,
+          expand: true,
+          onPressed: () async {
+            final t = TemplateDef(
+              id: 'tpl-${DateTime.now().microsecondsSinceEpoch}',
+              name: 'Nueva plantilla',
+              type: 'Levantamiento',
+              sections: [
+                SectionDef(id: 's_${DateTime.now().millisecondsSinceEpoch}', title: 'Información general', groups: [
+                  GroupDef(id: 'g_${DateTime.now().millisecondsSinceEpoch}', title: 'Datos generales'),
+                ]),
               ],
+            );
+            push(context, TemplateEditorScreen(template: t, isNew: true));
+          },
+        ),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+          children: [
+            const GlassCard(
+              color: AppColors.surfaceAlt,
+              child: Row(
+                children: [
+                  IconBadge(Icons.account_tree_rounded, color: AppColors.accent, size: 40),
+                  SizedBox(width: 13),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Plantilla › Secciones › Bloques › Preguntas', style: T.h3),
+                        SizedBox(height: 5),
+                        Text(
+                          'Cada cambio guardado crea una versión nueva. Las visitas que ya empezaron conservan '
+                          'la versión con la que iniciaron.',
+                          style: T.tiny,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          ...Mock.templates.map((t) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _TemplateCard(template: t),
-              )),
-        ],
+            const SizedBox(height: 20),
+            for (final t in store.templates) ...[_TemplateCard(template: t), const SizedBox(height: 12)],
+          ],
+        ),
       ),
     );
   }
 }
 
-class _TemplateCard extends StatefulWidget {
+class _TemplateCard extends StatelessWidget {
   const _TemplateCard({required this.template});
-  final SurveyTemplate template;
-
-  @override
-  State<_TemplateCard> createState() => _TemplateCardState();
-}
-
-class _TemplateCardState extends State<_TemplateCard> {
-  bool _open = false;
+  final TemplateDef template;
 
   @override
   Widget build(BuildContext context) {
-    final t = widget.template;
+    final store = SurveyStore.instance;
+    final t = template;
+    final uses = store.projects.where((p) => p.templateId == t.id).length;
+    final evidences = t.sections.fold<int>(
+        0, (a, s) => a + s.groups.fold<int>(0, (b, g) => b + g.questions.where((q) => q.type.isEvidence).length));
+
     return GlassCard(
-      padding: const EdgeInsets.all(15),
-      onTap: () => setState(() => _open = !_open),
+      onTap: () => push(context, TemplateEditorScreen(template: t)),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               IconBadge(Icons.dashboard_customize_rounded,
                   color: t.active ? AppColors.accent : AppColors.textMuted, size: 42),
-              const SizedBox(width: 13),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(t.name, style: T.h3),
-                    const SizedBox(height: 4),
-                    Text('${t.version} · ${t.type} · actualizada ${t.updated}', style: T.tiny),
+                    const SizedBox(height: 3),
+                    Text('${t.version} · ${t.type} · actualizada ${fmtDate(t.updatedAt)}', style: T.tiny),
                   ],
                 ),
               ),
-              if (!t.active)
-                const StatusPill('Inactiva', color: AppColors.textMuted, dense: true)
-              else
-                AnimatedRotation(
-                  turns: _open ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: const Icon(Icons.expand_more_rounded, color: AppColors.textMuted),
-                ),
+              Switch(value: t.active, onChanged: (v) => store.setTemplateActive(t, v)),
             ],
           ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 220),
-            crossFadeState: _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-            firstChild: const SizedBox(width: double.infinity),
-            secondChild: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 14),
-                const Divider(),
-                const SizedBox(height: 10),
-                ...t.sections.map((s) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 7),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 26,
-                            child: Text(s.code, style: T.mono.copyWith(color: AppColors.accent)),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(s.title, style: T.small)),
-                          if (s.questions > 0) ...[
-                            const Icon(Icons.help_outline_rounded, size: 12, color: AppColors.textMuted),
-                            const SizedBox(width: 4),
-                            Text('${s.questions}', style: T.tiny),
-                            const SizedBox(width: 10),
-                          ],
-                          const Icon(Icons.photo_camera_rounded, size: 12, color: AppColors.textMuted),
-                          const SizedBox(width: 4),
-                          Text('${s.evidences}', style: T.tiny),
-                        ],
-                      ),
-                    )),
-              ],
-            ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              StatusPill('${t.sections.length} secciones', color: AppColors.blue, dense: true),
+              StatusPill('${t.questionCount} preguntas', color: AppColors.violet, dense: true),
+              StatusPill('$evidences evidencias', color: AppColors.accent, dense: true),
+              StatusPill(uses == 0 ? 'Sin proyectos' : 'En $uses proyecto${uses == 1 ? '' : 's'}',
+                  color: uses == 0 ? AppColors.textMuted : AppColors.success, dense: true),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              AppButton('Editar', icon: Icons.edit_rounded, compact: true, kind: AppButtonKind.secondary,
+                  onPressed: () => push(context, TemplateEditorScreen(template: t))),
+              const SizedBox(width: 8),
+              AppButton('Duplicar', icon: Icons.copy_rounded, compact: true, kind: AppButtonKind.ghost,
+                  onPressed: () async {
+                    final copy = await store.duplicateTemplate(t);
+                    if (context.mounted) {
+                      showAppSnack(context, 'Se creó "${copy.name}"', icon: Icons.copy_rounded);
+                    }
+                  }),
+              const Spacer(),
+              if (uses == 0)
+                IconButton(
+                  tooltip: 'Eliminar',
+                  onPressed: () => _delete(context, t),
+                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.textMuted),
+                ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _delete(BuildContext context, TemplateDef t) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text('¿Eliminar plantilla?'),
+        content: Text('"${t.name}" no está asignada a ningún proyecto.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await SurveyStore.instance.deleteTemplate(t);
   }
 }

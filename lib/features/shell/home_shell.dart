@@ -8,7 +8,7 @@ import '../../main.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../projects/projects_screen.dart';
 import '../profile/profile_screen.dart';
-import '../sync/sync_screen.dart';
+import '../visits/visits_tab.dart';
 import 'quick_capture_sheet.dart';
 
 class HomeShell extends StatefulWidget {
@@ -24,7 +24,7 @@ class _HomeShellState extends State<HomeShell> {
   static const _items = [
     (Icons.space_dashboard_rounded, Icons.space_dashboard_outlined, 'Inicio'),
     (Icons.folder_rounded, Icons.folder_outlined, 'Proyectos'),
-    (Icons.sync_rounded, Icons.sync_outlined, 'Sincronizar'),
+    (Icons.event_note_rounded, Icons.event_note_outlined, 'Visitas'),
     (Icons.person_rounded, Icons.person_outline_rounded, 'Perfil'),
   ];
 
@@ -38,7 +38,7 @@ class _HomeShellState extends State<HomeShell> {
           children: [
             DashboardScreen(onSeeProjects: () => setState(() => _index = 1)),
             const ProjectsScreen(),
-            const SyncScreen(embedded: true),
+            const VisitsTab(),
             const ProfileScreen(),
           ],
         ),

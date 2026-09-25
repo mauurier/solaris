@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
+import '../../data/survey_store.dart';
 import '../../main.dart';
 import '../admin/clients_screen.dart';
 import '../admin/templates_screen.dart';
@@ -11,7 +12,12 @@ import '../admin/users_screen.dart';
 import '../auth/login_screen.dart';
 import '../history/history_screen.dart';
 import '../shell/home_shell.dart';
+import '../equipment/equipment_screen.dart';
+import '../findings/findings_screen.dart';
+import '../report/report_preview_screen.dart';
+import '../review/review_screen.dart';
 import '../stats/stats_screen.dart';
+import '../sync/sync_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -145,10 +151,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Divider(),
                   _switchRow(
                     Icons.gps_fixed_rounded,
-                    'Incrustar GPS en la evidencia',
-                    'Coordenadas y hora en cada archivo',
-                    _state.gpsStamp,
-                    (v) => setState(() => _state.gpsStamp = v),
+                    'Marca de agua con hora y GPS',
+                    'Siempre activa en las fotos tomadas con Solaris',
+                    true,
+                    null,
                   ),
                   const Divider(),
                   _switchRow(
@@ -173,29 +179,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Column(
                 children: [
-                  NavRow(
-                    dense: true,
-                    title: 'Estadísticas',
-                    subtitle: 'Proyectos, técnicos y empresa',
-                    icon: Icons.insights_rounded,
-                    iconColor: AppColors.blue,
-                    onTap: () => push(context, const StatsScreen()),
-                  ),
-                  const Divider(indent: 14, endIndent: 14),
-                  NavRow(
-                    dense: true,
-                    title: 'Historial de actividad',
-                    subtitle: 'Trazabilidad de cambios',
-                    icon: Icons.history_rounded,
-                    iconColor: AppColors.violet,
-                    onTap: () => push(context, const HistoryScreen()),
-                  ),
                   if (_state.role == UserRole.admin) ...[
                     const Divider(indent: 14, endIndent: 14),
                     NavRow(
                       dense: true,
                       title: 'Usuarios y roles',
-                      subtitle: '7 usuarios registrados',
+                      subtitle: '${Mock.users.length} usuarios registrados',
                       icon: Icons.group_rounded,
                       iconColor: AppColors.teal,
                       onTap: () => push(context, const UsersScreen()),
@@ -204,7 +193,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     NavRow(
                       dense: true,
                       title: 'Clientes',
-                      subtitle: '5 clientes activos',
+                      subtitle: '${Mock.clients.length} clientes',
                       icon: Icons.business_rounded,
                       iconColor: AppColors.blue,
                       onTap: () => push(context, const ClientsScreen()),
@@ -213,7 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     NavRow(
                       dense: true,
                       title: 'Plantillas de levantamiento',
-                      subtitle: '3 plantillas configuradas',
+                      subtitle: '${SurveyStore.instance.templates.length} configuradas · editor de secciones y preguntas',
                       icon: Icons.dashboard_customize_rounded,
                       iconColor: AppColors.accent,
                       onTap: () => push(context, const TemplatesScreen()),
@@ -223,20 +212,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   NavRow(
                     dense: true,
                     title: 'Almacenamiento local',
-                    subtitle: '1.8 GB usados · 4 proyectos descargados',
+                    subtitle: '${SurveyStore.instance.projects.length} proyectos · '
+                        '${SurveyStore.instance.evidences.length} evidencias en este teléfono',
                     icon: Icons.sd_storage_rounded,
                     iconColor: AppColors.warning,
-                    onTap: () => showAppSnack(context, 'Gestión de almacenamiento (prototipo)'),
+                    onTap: () => showAppSnack(context, 'Todo se guarda en el teléfono; comparte con Exportar ZIP'),
                   ),
                   const Divider(indent: 14, endIndent: 14),
                   NavRow(
                     dense: true,
                     title: 'Acerca de Solaris',
-                    subtitle: 'Versión 1.0.0 · Prototipo UI',
+                    subtitle: 'Versión 1.0.0 · Fase 1 offline',
                     icon: Icons.info_outline_rounded,
                     iconColor: AppColors.textMuted,
-                    onTap: () => showAppSnack(context, 'Prototipo de interfaz · sin backend'),
+                    onTap: () => showAppSnack(context, 'Fase 1: levantamiento offline con exportación ZIP'),
                   ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: SectionLabel('Vista previa · próximas fases'),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: GlassCard(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                children: [
+                  for (final (i, m) in _previews.indexed) ...[
+                    if (i > 0) const Divider(indent: 14, endIndent: 14),
+                    NavRow(
+                      dense: true,
+                      title: m.$1,
+                      subtitle: 'Datos de ejemplo',
+                      icon: m.$2,
+                      iconColor: AppColors.textMuted,
+                      onTap: () => push(context, m.$3()),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -270,7 +286,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
 
-  Widget _switchRow(IconData i, String title, String sub, bool value, ValueChanged<bool> onChanged) {
+  /// Módulos del prototipo que aún no se conectan a datos reales.
+  static final _previews = <(String, IconData, Widget Function())>[
+    ('Revisión del supervisor', Icons.rate_review_rounded, () => ReviewScreen(project: Mock.active)),
+    ('Reporte PDF', Icons.picture_as_pdf_rounded, () => ReportPreviewScreen(project: Mock.active)),
+    ('Hallazgos', Icons.report_problem_rounded, () => const FindingsScreen()),
+    ('Registro de equipos', Icons.memory_rounded, () => const EquipmentScreen()),
+    ('Sincronización', Icons.cloud_sync_rounded, () => const SyncScreen()),
+    ('Estadísticas', Icons.insights_rounded, () => const StatsScreen()),
+    ('Historial de actividad', Icons.history_rounded, () => const HistoryScreen()),
+  ];
+
+  Widget _switchRow(IconData i, String title, String sub, bool value, ValueChanged<bool>? onChanged) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
