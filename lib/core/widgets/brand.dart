@@ -2,7 +2,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
-/// Marca de la aplicación: sol + rayo.
+/// Marca de la aplicación: sol minimalista oscuro sobre fondo ámbar.
+/// Es el mismo dibujo del ícono de la app (ver `tool/generate_app_icon.dart`).
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.size = 56, this.radiusFactor = 0.3});
   final double size;
@@ -24,47 +25,37 @@ class BrandMark extends StatelessWidget {
           ),
         ],
       ),
-      child: CustomPaint(painter: _MarkPainter()),
+      child: const CustomPaint(painter: SunMarkPainter()),
     );
   }
 }
 
-class _MarkPainter extends CustomPainter {
+/// Sol de la marca: disco con 8 rayos redondeados, centrado en el lienzo.
+class SunMarkPainter extends CustomPainter {
+  const SunMarkPainter({this.color = const Color(0xFF1B1200)});
+  final Color color;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height / 2);
-    final r = size.width * 0.20;
-    final ink = Paint()
-      ..color = const Color(0xFF1B1200)
+    final s = size.shortestSide;
+    final c = size.center(Offset.zero);
+    final r = s * 0.16;
+    final ray = Paint()
+      ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.055
+      ..strokeWidth = s * 0.055
       ..strokeCap = StrokeCap.round;
 
-    // Rayos del sol
     for (var i = 0; i < 8; i++) {
-      final a = (math.pi * 2 / 8) * i - math.pi / 2;
-      final p1 = c + Offset(math.cos(a), math.sin(a)) * (r * 1.55);
-      final p2 = c + Offset(math.cos(a), math.sin(a)) * (r * 2.05);
-      canvas.drawLine(p1, p2, ink);
+      final a = math.pi * 2 / 8 * i;
+      final d = Offset(math.cos(a), math.sin(a));
+      canvas.drawLine(c + d * (r * 1.6), c + d * (r * 2.15), ray);
     }
-
-    // Disco
-    canvas.drawCircle(c, r, Paint()..color = const Color(0xFF1B1200));
-
-    // Rayo
-    final bolt = Path()
-      ..moveTo(c.dx + r * 0.24, c.dy - r * 0.62)
-      ..lineTo(c.dx - r * 0.34, c.dy + r * 0.10)
-      ..lineTo(c.dx + r * 0.02, c.dy + r * 0.10)
-      ..lineTo(c.dx - r * 0.20, c.dy + r * 0.66)
-      ..lineTo(c.dx + r * 0.38, c.dy - r * 0.06)
-      ..lineTo(c.dx - r * 0.01, c.dy - r * 0.06)
-      ..close();
-    canvas.drawPath(bolt, Paint()..color = const Color(0xFFFFD08A));
+    canvas.drawCircle(c, r, Paint()..color = color);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant SunMarkPainter oldDelegate) => oldDelegate.color != color;
 }
 
 class BrandWordmark extends StatelessWidget {
