@@ -250,6 +250,40 @@ void main() {
       expect(store.activeVisitFor('Juan Pérez'), v2, reason: 'una visita finalizada ya no está activa');
     });
 
+    test('el conteo de evidencias del técnico no suma lo capturado de más', () async {
+      final store = await initTestStore();
+      final proj = await seedProject(store, start: true);
+      final v = store.latestVisit(proj.id)!;
+      const key = AnswerKey('g_tablero', 0, 'cerrado');
+      final engine0 = store.engineFor(v);
+      expect(engine0.questions().any((rq) => rq.key == key), isTrue, reason: 'la pregunta debe estar visible');
+      final q = engine0.questions().firstWhere((rq) => rq.key == key).question;
+      final need = q.minCount < 1 ? 1 : q.minCount;
+      final before = engine0.evidenceProgress;
+      expect(before.captured, 0);
+      expect(before.required, greaterThanOrEqualTo(need));
+
+      final dir = Directory.systemTemp.createTempSync('solaris_ev_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      for (var i = 0; i <= need; i++) {
+        await store.addEvidence(visit: v, key: key, kind: EvidenceKind.photo, file: _jpeg(dir, 'f$i.jpg'));
+      }
+      final after = store.engineFor(v).evidenceProgress;
+      expect(after.captured, need, reason: '${need + 1} fotos cuentan como $need');
+      expect(after.required, before.required);
+    });
+
+    test('sin visita en curso, el inicio del técnico usa la última que terminó', () async {
+      final store = await initTestStore();
+      final proj = await seedProject(store, start: true);
+      final v = store.latestVisit(proj.id)!;
+      expect(store.recentVisitFor('Juan Pérez'), v);
+      await store.finishVisit(v, const GeoPoint(26, -98));
+      expect(store.activeVisitFor('Juan Pérez'), isNull);
+      expect(store.recentVisitFor('Juan Pérez'), v);
+      expect(store.recentVisitFor('Diego Salas'), isNull);
+    });
+
     test('el inicio abre Proyectos con el filtro de pendientes', () {
       HomeNav.tab.value = 0;
       HomeNav.openProjects(filter: 'Con pendientes');

@@ -277,6 +277,16 @@ class SurveyStore extends ChangeNotifier {
     return list.firstOrNull;
   }
 
+  /// Visita de referencia del inicio del técnico: la en curso que abrió al
+  /// último o, si no tiene ninguna, la que terminó más recientemente.
+  FieldVisit? recentVisitFor(String user) {
+    final active = activeVisitFor(user);
+    if (active != null) return active;
+    final done = visits.where((v) => v.finished && v.technician == user).toList()
+      ..sort((a, b) => b.endedAt!.compareTo(a.endedAt!));
+    return done.firstOrNull;
+  }
+
   /// El técnico abrió la visita; sólo cuenta si es suya y está en curso.
   Future<void> markVisitOpened(FieldVisit v, String user) async {
     if (v.technician != user || !v.started || v.finished) return;

@@ -8,6 +8,7 @@ import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/features/dashboard/breakdown_screen.dart';
+import 'package:proyecto_app/features/shell/home_shell.dart';
 
 import 'test_helpers.dart';
 
@@ -53,5 +54,17 @@ void main() {
     await tester.tap(find.text('Todos'));
     await tester.pumpAndSettle();
     expect(find.text('2 evidencias'), findsOneWidget);
+  });
+
+  testWidgets('El inicio del técnico cuenta evidencias de su visita reciente', (tester) async {
+    final store = await initTestStore();
+    final proj = await seedProject(store, start: true);
+    final progress = store.engineFor(store.latestVisit(proj.id)!).evidenceProgress;
+    AppState.instance.setRole(UserRole.tecnico);
+
+    await pumpOnPhone(tester, const HomeShell());
+    expect(find.text('0/${progress.required}', skipOffstage: false), findsOneWidget);
+    expect(find.text('faltan ${progress.required} · ${proj.name}', skipOffstage: false), findsOneWidget);
+    expect(find.text('1 en curso'), findsOneWidget);
   });
 }

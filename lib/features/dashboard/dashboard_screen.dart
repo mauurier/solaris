@@ -47,7 +47,12 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 6),
               if (isField) _FieldCard(store: store, user: state.userName) else _PortfolioCard(projects: projects),
               const SizedBox(height: 22),
-              _KpiRow(projects: projects, isField: isField, interactive: state.role == UserRole.admin),
+              _KpiRow(
+                projects: projects,
+                isField: isField,
+                user: state.userName,
+                interactive: state.role == UserRole.admin,
+              ),
               const SizedBox(height: 24),
               _RecentProjects(projects: projects, onSeeAll: onSeeProjects, canCreate: !isField),
               if (state.role == UserRole.admin) ...[
@@ -260,9 +265,10 @@ class _PortfolioCard extends StatelessWidget {
 }
 
 class _KpiRow extends StatelessWidget {
-  const _KpiRow({required this.projects, required this.isField, required this.interactive});
+  const _KpiRow({required this.projects, required this.isField, required this.user, required this.interactive});
   final List<SurveyProject> projects;
   final bool isField;
+  final String user;
 
   /// Sólo el admin puede tocar los indicadores para ver el detalle.
   final bool interactive;
@@ -279,18 +285,20 @@ class _KpiRow extends StatelessWidget {
     final blocking = projects.fold<int>(0, (a, p) => a + store.blockingPendingsOf(p.id));
     final docs = store.documents.where((d) => ids.contains(d.projectId)).length;
 
-    final kpis = <(String, String, String, Color, IconData, VoidCallback)>[
-      ('Proyectos', '${projects.length}', isField ? 'asignados' : 'en el teléfono', AppColors.blue,
-          Icons.folder_rounded, HomeNav.openProjects),
-      ('Visitas', '${visits.where((v) => v.started && !v.finished).length}', 'en curso', AppColors.accent,
-          Icons.pending_actions_rounded, HomeNav.openVisits),
-      ('Pendientes', '$blocking', 'obligatorios', AppColors.danger, Icons.checklist_rounded,
-          () => HomeNav.openProjects(filter: 'Con pendientes')),
-      ('Evidencias', '${ev.length}', '${todayEv.length} hoy', AppColors.teal, Icons.photo_library_rounded,
-          () => push(context, ProjectBreakdownScreen(kind: BreakdownKind.evidences, projects: projects))),
-      ('Documentos', '$docs', 'de proyecto', AppColors.violet, Icons.folder_copy_rounded,
-          () => push(context, ProjectBreakdownScreen(kind: BreakdownKind.documents, projects: projects))),
-    ];
+    final kpis = isField
+        ? _fieldKpis(store, projects.length, docs)
+        : <(String, String, String, Color, IconData, VoidCallback)>[
+          ('Proyectos', '${projects.length}', 'en el teléfono', AppColors.blue,
+              Icons.folder_rounded, HomeNav.openProjects),
+          ('Visitas', '${visits.where((v) => v.started && !v.finished).length}', 'en curso', AppColors.accent,
+              Icons.pending_actions_rounded, HomeNav.openVisits),
+          ('Pendientes', '$blocking', 'obligatorios', AppColors.danger, Icons.checklist_rounded,
+              () => HomeNav.openProjects(filter: 'Con pendientes')),
+          ('Evidencias', '${ev.length}', '${todayEv.length} hoy', AppColors.teal, Icons.photo_library_rounded,
+              () => push(context, ProjectBreakdownScreen(kind: BreakdownKind.evidences, projects: projects))),
+          ('Documentos', '$docs', 'de proyecto', AppColors.violet, Icons.folder_copy_rounded,
+              () => push(context, ProjectBreakdownScreen(kind: BreakdownKind.documents, projects: projects))),
+          ];
 
     return SizedBox(
       height: 106,
@@ -327,9 +335,14 @@ class _KpiRow extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(k.$2, style: T.display.copyWith(fontSize: 27, color: AppColors.textPrimary)),
+                      // "19/29" no debe desbordar la tarjeta: se reduce si hace falta.
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(k.$2, style: T.display.copyWith(fontSize: 27, color: AppColors.textPrimary)),
+                      ),
                       const SizedBox(height: 2),
-                      Text(k.$3, style: T.tiny),
+                      Text(k.$3, style: T.tiny, maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ],
@@ -339,6 +352,36 @@ class _KpiRow extends StatelessWidget {
         },
       ),
     );
+  }
+
+  /// Técnico: sus proyectos y visitas, y pendientes y evidencias de la visita
+  /// reciente (la en curso que abrió al último o la última que terminó).
+  List<(String, String, String, Color, IconData, VoidCallback)> _fieldKpis(
+      SurveyStore store, int projectCount, int docs) {
+    final mine = store.visits.where((v) => v.technician == user).toList();
+    final running = mine.where((v) => v.started && !v.finished).length;
+    final recent = store.recentVisitFor(user);
+    final engine = recent == null ? null : store.engineFor(recent);
+    final evidence = engine?.evidenceProgress;
+    final missing = evidence == null ? 0 : evidence.required - evidence.captured;
+    // Los folios VIS-001 se repiten entre proyectos: se nombra el proyecto.
+    final where = recent == null ? 'sin visita en curso' : store.project(recent.projectId)?.name ?? recent.label;
+    return [
+      ('Proyectos', '$projectCount', 'asignados', AppColors.blue, Icons.folder_rounded, HomeNav.openProjects),
+      ('Visitas', '${mine.length}', '$running en curso', AppColors.accent, Icons.pending_actions_rounded,
+          HomeNav.openVisits),
+      ('Pendientes', '${engine?.blockingCount ?? 0}', 'obligatorios · $where', AppColors.danger,
+          Icons.checklist_rounded, () => HomeNav.openProjects(filter: 'Con pendientes')),
+      (
+        'Evidencias',
+        evidence == null ? '0' : '${evidence.captured}/${evidence.required}',
+        evidence == null ? where : (missing == 0 ? 'completas · $where' : 'faltan $missing · $where'),
+        AppColors.teal,
+        Icons.photo_library_rounded,
+        HomeNav.openVisits,
+      ),
+      ('Documentos', '$docs', 'de proyecto', AppColors.violet, Icons.folder_copy_rounded, HomeNav.openProjects),
+    ];
   }
 }
 

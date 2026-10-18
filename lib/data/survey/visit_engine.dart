@@ -169,6 +169,22 @@ class VisitEngine {
 
   int get blockingCount => pendings().where((p) => p.kind == PendingKind.blocking).length;
 
+  /// Evidencias capturadas contra las que pide la plantilla (p. ej. 19/29).
+  /// Cada pregunta de evidencia visible aporta su mínimo; lo que se capture de
+  /// más no suma, y un documento ya subido al proyecto cuenta como completo.
+  ({int captured, int required}) get evidenceProgress {
+    var captured = 0, required = 0;
+    for (final rq in questions()) {
+      final q = rq.question;
+      if (!q.type.isEvidence) continue;
+      final need = q.minCount < 1 ? 1 : q.minCount;
+      final have = isAnswered(rq) ? need : evidenceCount(rq.key);
+      required += need;
+      captured += have < need ? have : need;
+    }
+    return (captured: captured, required: required);
+  }
+
   /// Un levantamiento sólo se cierra sin pendientes obligatorios sin justificar.
   bool get canClose => blockingCount == 0;
 }
