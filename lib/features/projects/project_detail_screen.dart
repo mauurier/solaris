@@ -32,6 +32,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   SurveyProject get p => widget.project;
 
+  @override
+  void initState() {
+    super.initState();
+    final state = AppState.instance;
+    if (state.role == UserRole.tecnico) _store.markProjectOpened(p.id, state.userName);
+  }
+
   bool get _isManager {
     final r = AppState.instance.role;
     return r == UserRole.admin || r == UserRole.supervisor;

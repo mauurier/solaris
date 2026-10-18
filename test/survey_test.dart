@@ -231,6 +231,25 @@ void main() {
       expect(store.blockingPendingsOf(started.id), 0, reason: 'visita finalizada');
     });
 
+    test('la visita en curso del inicio es la del último proyecto abierto', () async {
+      final store = await initTestStore();
+      final first = await seedProject(store, start: true);
+      final second = await seedProject(store, start: true);
+      final v1 = store.latestVisit(first.id)!;
+      final v2 = store.latestVisit(second.id)!;
+      expect(store.activeVisitFor('Juan Pérez'), v2, reason: 'sin aperturas manda la última iniciada');
+
+      await store.markProjectOpened(first.id, 'Juan Pérez');
+      expect(store.activeVisitFor('Juan Pérez'), v1);
+      expect(FieldVisit.fromJson(v1.toJson()).openedAt, v1.openedAt, reason: 'se conserva al reabrir la app');
+
+      await store.markVisitOpened(v2, 'Diego Salas');
+      expect(store.activeVisitFor('Juan Pérez'), v1, reason: 'otro usuario no cuenta');
+
+      await store.finishVisit(v1, const GeoPoint(26, -98));
+      expect(store.activeVisitFor('Juan Pérez'), v2, reason: 'una visita finalizada ya no está activa');
+    });
+
     test('el inicio abre Proyectos con el filtro de pendientes', () {
       HomeNav.tab.value = 0;
       HomeNav.openProjects(filter: 'Con pendientes');

@@ -34,6 +34,13 @@ class _VisitScreenState extends State<VisitScreen> {
 
   FieldVisit get v => widget.visit;
 
+  @override
+  void initState() {
+    super.initState();
+    final state = AppState.instance;
+    if (state.role == UserRole.tecnico) _store.markVisitOpened(v, state.userName);
+  }
+
   bool get _canEdit => v.started && !v.finished;
 
   Future<void> _start() async {

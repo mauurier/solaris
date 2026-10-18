@@ -268,10 +268,28 @@ class SurveyStore extends ChangeNotifier {
   FieldVisit? latestVisit(String projectId) => visitsOf(projectId).firstOrNull;
 
   /// Visita que el usuario tiene iniciada y sin cerrar, si hay alguna.
+  /// Visita en curso del técnico: la del último proyecto activo que abrió.
+  /// Si aún no ha abierto ninguna, la iniciada más recientemente.
   FieldVisit? activeVisitFor(String user) {
+    DateTime last(FieldVisit v) => v.openedAt ?? v.startedAt!;
     final list = visits.where((v) => v.started && !v.finished && v.technician == user).toList()
-      ..sort((a, b) => b.startedAt!.compareTo(a.startedAt!));
+      ..sort((a, b) => last(b).compareTo(last(a)));
     return list.firstOrNull;
+  }
+
+  /// El técnico abrió la visita; sólo cuenta si es suya y está en curso.
+  Future<void> markVisitOpened(FieldVisit v, String user) async {
+    if (v.technician != user || !v.started || v.finished) return;
+    v.openedAt = DateTime.now();
+    // Abrir no es modificar: no se toca la actividad del proyecto.
+    await db.put(Tables.visits, v.id, v.toJson(), parent: v.projectId);
+    notifyListeners();
+  }
+
+  /// El técnico abrió el proyecto: cuenta como abrir su visita en curso.
+  Future<void> markProjectOpened(String projectId, String user) async {
+    final v = visitsOf(projectId).where((v) => v.started && !v.finished && v.technician == user).firstOrNull;
+    if (v != null) await markVisitOpened(v, user);
   }
 
   Future<FieldVisit> createVisit(SurveyProject project,

@@ -195,6 +195,7 @@ class FieldVisit {
     this.endedAt,
     this.startPoint,
     this.endPoint,
+    this.openedAt,
     this.template,
     Map<String, int>? instances,
     Map<String, String>? justifications,
@@ -215,6 +216,9 @@ class FieldVisit {
   DateTime? endedAt;
   GeoPoint? startPoint;
   GeoPoint? endPoint;
+
+  /// Última vez que el técnico asignado abrió la visita o su proyecto.
+  DateTime? openedAt;
 
   /// Copia de la plantilla tomada al iniciar la visita. Así, editar la
   /// plantilla después no altera un levantamiento que ya está en curso.
@@ -247,6 +251,7 @@ class FieldVisit {
         'endedAt': endedAt?.toIso8601String(),
         'startPoint': startPoint?.toJson(),
         'endPoint': endPoint?.toJson(),
+        'openedAt': openedAt?.toIso8601String(),
         'template': template == null ? null : jsonEncode(template!.toJson()),
         'instances': instances,
         'justifications': justifications,
@@ -267,6 +272,7 @@ class FieldVisit {
         endedAt: DateTime.tryParse(j['endedAt'] as String? ?? ''),
         startPoint: GeoPoint.fromJson(j['startPoint']),
         endPoint: GeoPoint.fromJson(j['endPoint']),
+        openedAt: DateTime.tryParse(j['openedAt'] as String? ?? ''),
         template: j['template'] == null
             ? null
             : TemplateDef.fromJson((jsonDecode(j['template'] as String) as Map).cast<String, Object?>()),
