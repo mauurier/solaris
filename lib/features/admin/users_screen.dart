@@ -34,7 +34,7 @@ class _UsersScreenState extends State<UsersScreen> {
       child: Column(
         children: [
           FilterChips(
-            options: const ['Todos', 'Admin', 'Supervisor', 'Técnico', 'Revisor'],
+            options: const ['Todos', 'Admin', 'Supervisor', 'Técnico'],
             selected: _filter,
             onSelected: (v) => setState(() => _filter = v),
           ),
@@ -115,9 +115,10 @@ class _UsersScreenState extends State<UsersScreen> {
       UserRole.supervisor => [
           'Crear proyectos y visitas',
           'Asignar técnicos',
-          'Revisar información y evidencia',
+          'Revisar información técnica y evidencia',
+          'Registrar observaciones de revisión',
           'Solicitar correcciones',
-          'Aprobar levantamientos',
+          'Aprobar o rechazar levantamientos',
           'Generar reportes y descargar',
           'Consultar estadísticas',
         ],
@@ -130,13 +131,6 @@ class _UsersScreenState extends State<UsersScreen> {
           'Firmar el levantamiento',
           'Generar borrador del reporte',
           'Sincronizar información',
-        ],
-      UserRole.revisor => [
-          'Consultar levantamientos',
-          'Revisar información técnica y evidencia',
-          'Registrar observaciones',
-          'Solicitar correcciones',
-          'Aprobar o rechazar levantamientos',
         ],
     };
 
@@ -211,7 +205,7 @@ class _UsersScreenState extends State<UsersScreen> {
             const SizedBox(height: 16),
             const FieldLabel('Rol', required: true),
             SegmentedPicker(
-              options: const ['Admin', 'Superv.', 'Técnico', 'Revisor'],
+              options: const ['Admin', 'Superv.', 'Técnico'],
               selected: 'Técnico',
               onSelected: (_) {},
             ),

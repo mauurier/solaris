@@ -103,7 +103,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          const SectionLabel('Observaciones del revisor'),
+          const SectionLabel('Observaciones del supervisor'),
           GlassCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

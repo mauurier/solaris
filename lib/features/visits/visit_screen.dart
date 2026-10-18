@@ -34,7 +34,7 @@ class _VisitScreenState extends State<VisitScreen> {
 
   FieldVisit get v => widget.visit;
 
-  bool get _canEdit => v.started && !v.finished && AppState.instance.role != UserRole.revisor;
+  bool get _canEdit => v.started && !v.finished;
 
   Future<void> _start() async {
     setState(() => _starting = true);
@@ -81,7 +81,7 @@ class _VisitScreenState extends State<VisitScreen> {
                   _starting ? 'Obteniendo ubicación…' : 'Iniciar visita',
                   icon: Icons.play_circle_fill_rounded,
                   expand: true,
-                  onPressed: _starting || role == UserRole.revisor ? null : _start,
+                  onPressed: _starting ? null : _start,
                 )
               : v.finished
                   ? Row(
@@ -102,7 +102,7 @@ class _VisitScreenState extends State<VisitScreen> {
                       'Validar y finalizar',
                       icon: Icons.fact_check_rounded,
                       expand: true,
-                      onPressed: role == UserRole.revisor ? null : () => push(context, ValidationScreen(visit: v)),
+                      onPressed: () => push(context, ValidationScreen(visit: v)),
                     ),
           child: v.started ? _inProgress(project) : _notStarted(project),
         );

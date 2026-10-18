@@ -97,7 +97,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                           style: T.tiny,
                         ),
                         const SizedBox(height: 14),
-                        ProjectDocumentsPanel(project: p, canEdit: role != UserRole.revisor),
+                        ProjectDocumentsPanel(project: p, canEdit: true),
                       ],
                     ),
                   'Evidencia' => _evidence(),

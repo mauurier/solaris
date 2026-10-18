@@ -72,6 +72,7 @@ lib/
 ## Roles
 
 La pantalla de acceso y el perfil permiten cambiar entre **Administrador**,
-**Supervisor**, **Técnico** y **Revisor**. El técnico sólo ve sus proyectos;
-supervisor y admin crean proyectos y justifican pendientes; el admin edita
-plantillas.
+**Supervisor** y **Técnico**. El técnico sólo ve sus proyectos;
+supervisor y admin crean proyectos y justifican pendientes; el supervisor
+también revisa, solicita correcciones y aprueba o rechaza levantamientos
+(absorbe el antiguo rol de revisor); el admin edita plantillas.

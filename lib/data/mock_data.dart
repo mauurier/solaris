@@ -29,9 +29,6 @@ class AppState extends ChangeNotifier {
       case UserRole.tecnico:
         userName = 'Juan Pérez';
         userInitials = 'JP';
-      case UserRole.revisor:
-        userName = 'Ing. Carlos Ruiz';
-        userInitials = 'CR';
     }
     notifyListeners();
   }
@@ -431,7 +428,7 @@ class Mock {
     AppUser(name: 'Juan Pérez', role: UserRole.tecnico, email: 'j.perez@solaris.mx', initials: 'JP', projects: 27),
     AppUser(name: 'Diego Salas', role: UserRole.tecnico, email: 'd.salas@solaris.mx', initials: 'DS', projects: 21),
     AppUser(name: 'Ana Torres', role: UserRole.tecnico, email: 'a.torres@solaris.mx', initials: 'AT', projects: 9),
-    AppUser(name: 'Ing. Carlos Ruiz', role: UserRole.revisor, email: 'c.ruiz@solaris.mx', initials: 'CR', projects: 33),
+    AppUser(name: 'Ing. Carlos Ruiz', role: UserRole.supervisor, email: 'c.ruiz@solaris.mx', initials: 'CR', projects: 33),
     AppUser(name: 'Sofía Herrera', role: UserRole.tecnico, email: 's.herrera@solaris.mx', initials: 'SH', projects: 4, active: false),
   ];
 

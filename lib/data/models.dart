@@ -1,35 +1,31 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 
-enum UserRole { admin, supervisor, tecnico, revisor }
+enum UserRole { admin, supervisor, tecnico }
 
 extension UserRoleX on UserRole {
   String get label => switch (this) {
         UserRole.admin => 'Administrador',
         UserRole.supervisor => 'Supervisor',
         UserRole.tecnico => 'Técnico de campo',
-        UserRole.revisor => 'Revisor / Ingeniero',
       };
 
   String get short => switch (this) {
         UserRole.admin => 'Admin',
         UserRole.supervisor => 'Supervisor',
         UserRole.tecnico => 'Técnico',
-        UserRole.revisor => 'Revisor',
       };
 
   IconData get icon => switch (this) {
         UserRole.admin => Icons.admin_panel_settings_rounded,
         UserRole.supervisor => Icons.verified_user_rounded,
         UserRole.tecnico => Icons.engineering_rounded,
-        UserRole.revisor => Icons.fact_check_rounded,
       };
 
   Color get color => switch (this) {
         UserRole.admin => AppColors.violet,
         UserRole.supervisor => AppColors.blue,
         UserRole.tecnico => AppColors.accent,
-        UserRole.revisor => AppColors.teal,
       };
 }
 

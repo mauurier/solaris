@@ -48,7 +48,7 @@ class DashboardScreen extends StatelessWidget {
               const SizedBox(height: 22),
               _KpiRow(projects: projects, isField: isField),
               const SizedBox(height: 24),
-              _RecentProjects(projects: projects, onSeeAll: onSeeProjects, canCreate: !isField && state.role != UserRole.revisor),
+              _RecentProjects(projects: projects, onSeeAll: onSeeProjects, canCreate: !isField),
               if (state.role == UserRole.admin) ...[
                 const SizedBox(height: 24),
                 const _AdminTools(),
