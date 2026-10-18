@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
+import 'package:proyecto_app/core/widgets/ui.dart';
 import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
@@ -67,4 +68,27 @@ void main() {
     expect(find.text('faltan ${progress.required} · ${proj.name}', skipOffstage: false), findsOneWidget);
     expect(find.text('1 en curso'), findsOneWidget);
   });
+
+  testWidgets('El inicio del supervisor muestra activos, por revisar y visitas en curso', (tester) async {
+    final store = await initTestStore();
+    await seedProject(store, start: true); // en captura
+    final done = await seedProject(store, start: true);
+    await store.finishVisit(store.latestVisit(done.id)!, const GeoPoint(26, -98)); // por revisar
+    AppState.instance.setRole(UserRole.supervisor);
+
+    await pumpOnPhone(tester, const HomeShell());
+    String valueOf(String title) {
+      final card = find.ancestor(of: find.text(title, skipOffstage: false), matching: find.byType(GlassCard)).first;
+      final texts = find.descendant(of: card, matching: find.byType(Text), skipOffstage: false);
+      return tester.widgetList<Text>(texts).map((t) => t.data).elementAt(1)!;
+    }
+
+    expect(valueOf('Activos'), '2');
+    expect(valueOf('Por revisar'), '1');
+    expect(valueOf('Visitas'), '1');
+    expect(find.text('Pendientes', skipOffstage: false), findsOneWidget);
+    expect(find.text('Evidencias', skipOffstage: false), findsNothing);
+    expect(find.text('de proyecto', skipOffstage: false), findsNothing, reason: 'sin tarjeta de documentos');
+  });
 }
+

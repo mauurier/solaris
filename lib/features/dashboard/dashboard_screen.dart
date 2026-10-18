@@ -50,6 +50,7 @@ class DashboardScreen extends StatelessWidget {
               _KpiRow(
                 projects: projects,
                 isField: isField,
+                isSupervisor: state.role == UserRole.supervisor,
                 user: state.userName,
                 interactive: state.role == UserRole.admin,
               ),
@@ -265,9 +266,16 @@ class _PortfolioCard extends StatelessWidget {
 }
 
 class _KpiRow extends StatelessWidget {
-  const _KpiRow({required this.projects, required this.isField, required this.user, required this.interactive});
+  const _KpiRow({
+    required this.projects,
+    required this.isField,
+    required this.isSupervisor,
+    required this.user,
+    required this.interactive,
+  });
   final List<SurveyProject> projects;
   final bool isField;
+  final bool isSupervisor;
   final String user;
 
   /// Sólo el admin puede tocar los indicadores para ver el detalle.
@@ -287,7 +295,9 @@ class _KpiRow extends StatelessWidget {
 
     final kpis = isField
         ? _fieldKpis(store, projects.length, docs)
-        : <(String, String, String, Color, IconData, VoidCallback)>[
+        : isSupervisor
+            ? _supervisorKpis(visits, blocking)
+            : <(String, String, String, Color, IconData, VoidCallback)>[
           ('Proyectos', '${projects.length}', 'en el teléfono', AppColors.blue,
               Icons.folder_rounded, HomeNav.openProjects),
           ('Visitas', '${visits.where((v) => v.started && !v.finished).length}', 'en curso', AppColors.accent,
@@ -352,6 +362,26 @@ class _KpiRow extends StatelessWidget {
         },
       ),
     );
+  }
+
+  /// Supervisor: el trabajo que tiene que seguir o revisar; las evidencias y
+  /// los documentos no le hacen falta en el inicio.
+  List<(String, String, String, Color, IconData, VoidCallback)> _supervisorKpis(
+      List<FieldVisit> visits, int blocking) {
+    final active = projects.where((p) => p.status != ProjectStatus.aprobado && p.status != ProjectStatus.cerrado);
+    // Al cerrar la visita el proyecto queda pendiente de sincronizar: es lo que
+    // el supervisor tiene que revisar mientras no haya servidor.
+    final toReview = projects
+        .where((p) => p.status == ProjectStatus.pendienteSync || p.status == ProjectStatus.enRevision);
+    final running = visits.where((v) => v.started && !v.finished).length;
+    return [
+      ('Activos', '${active.length}', 'proyectos', AppColors.blue, Icons.folder_rounded, HomeNav.openProjects),
+      ('Por revisar', '${toReview.length}', 'proyectos', AppColors.teal, Icons.rate_review_rounded,
+          HomeNav.openProjects),
+      ('Visitas', '$running', 'en curso', AppColors.accent, Icons.pending_actions_rounded, HomeNav.openVisits),
+      ('Pendientes', '$blocking', 'obligatorios', AppColors.danger, Icons.checklist_rounded,
+          () => HomeNav.openProjects(filter: 'Con pendientes')),
+    ];
   }
 
   /// Técnico: sus proyectos y visitas, y pendientes y evidencias de la visita
