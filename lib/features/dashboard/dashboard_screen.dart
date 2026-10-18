@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../core/services/formatting.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/widgets/charts.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
@@ -14,10 +13,10 @@ import '../admin/clients_screen.dart';
 import '../admin/templates_screen.dart';
 import '../admin/users_screen.dart';
 import '../projects/new_project_screen.dart';
-import '../projects/project_detail_screen.dart';
 import '../projects/projects_screen.dart';
 import '../shell/home_shell.dart';
 import '../visits/visit_screen.dart';
+import 'breakdown_screen.dart';
 
 /// Inicio: visita en curso (técnico) o resumen de la cartera (supervisor y
 /// admin), todo calculado con los datos guardados en el teléfono.
@@ -288,9 +287,9 @@ class _KpiRow extends StatelessWidget {
       ('Pendientes', '$blocking', 'obligatorios', AppColors.danger, Icons.checklist_rounded,
           () => HomeNav.openProjects(filter: 'Con pendientes')),
       ('Evidencias', '${ev.length}', '${todayEv.length} hoy', AppColors.teal, Icons.photo_library_rounded,
-          () => _showEvidenceBreakdown(context, projects)),
+          () => push(context, ProjectBreakdownScreen(kind: BreakdownKind.evidences, projects: projects))),
       ('Documentos', '$docs', 'de proyecto', AppColors.violet, Icons.folder_copy_rounded,
-          () => _showDocumentBreakdown(context, projects)),
+          () => push(context, ProjectBreakdownScreen(kind: BreakdownKind.documents, projects: projects))),
     ];
 
     return SizedBox(
@@ -493,127 +492,6 @@ class TimelineRow extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ------------------------------------------------------- detalle de indicadores
-
-void _showEvidenceBreakdown(BuildContext context, List<SurveyProject> projects) {
-  final store = SurveyStore.instance;
-  final ids = projects.map((p) => p.id).toSet();
-  final ev = store.evidences.where((e) => ids.contains(e.projectId)).toList();
-  const kinds = [
-    (EvidenceKind.photo, 'Fotografías', AppColors.accent),
-    (EvidenceKind.video, 'Videos', AppColors.blue),
-    (EvidenceKind.document, 'Documentos', AppColors.violet),
-    (EvidenceKind.signature, 'Firmas', AppColors.teal),
-  ];
-  showAppSheet(
-    context,
-    title: 'Evidencias',
-    subtitle: '${ev.length} capturadas en ${projects.length} proyecto${projects.length == 1 ? '' : 's'}',
-    child: _BreakdownSheet(
-      emptyIcon: Icons.photo_library_outlined,
-      segments: [for (final k in kinds) (k.$2, ev.where((e) => e.kind == k.$1).length.toDouble(), k.$3)],
-      perProject: [for (final p in projects) (p, ev.where((e) => e.projectId == p.id).length)],
-      color: AppColors.teal,
-    ),
-  );
-}
-
-void _showDocumentBreakdown(BuildContext context, List<SurveyProject> projects) {
-  final store = SurveyStore.instance;
-  final ids = projects.map((p) => p.id).toSet();
-  final docs = store.documents.where((d) => ids.contains(d.projectId)).toList();
-  final byCategory = <String, int>{};
-  for (final d in docs) {
-    byCategory[d.category] = (byCategory[d.category] ?? 0) + 1;
-  }
-  final top = byCategory.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-  const palette = [AppColors.violet, AppColors.blue, AppColors.accent, AppColors.teal, AppColors.warning];
-  // Más de cinco categorías no se distinguen en la dona: el resto se agrupa.
-  final rest = top.skip(palette.length - 1).fold<int>(0, (a, e) => a + e.value);
-  final segments = <(String, double, Color)>[
-    for (var i = 0; i < top.length && (i < palette.length - 1 || top.length == palette.length); i++)
-      (top[i].key, top[i].value.toDouble(), palette[i]),
-    if (top.length > palette.length) ('Otras', rest.toDouble(), palette.last),
-  ];
-  showAppSheet(
-    context,
-    title: 'Documentos',
-    subtitle: '${docs.length} de proyecto en ${projects.length} proyecto${projects.length == 1 ? '' : 's'}',
-    child: _BreakdownSheet(
-      emptyIcon: Icons.folder_off_rounded,
-      segments: segments,
-      perProject: [for (final p in projects) (p, docs.where((d) => d.projectId == p.id).length)],
-      color: AppColors.violet,
-    ),
-  );
-}
-
-/// Dona por tipo y listado por proyecto; tocar un proyecto abre su detalle.
-class _BreakdownSheet extends StatelessWidget {
-  const _BreakdownSheet({
-    required this.emptyIcon,
-    required this.segments,
-    required this.perProject,
-    required this.color,
-  });
-
-  final IconData emptyIcon;
-  final List<(String, double, Color)> segments;
-  final List<(SurveyProject, int)> perProject;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final total = segments.fold<double>(0, (a, s) => a + s.$2);
-    if (total == 0) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(30, 10, 30, 24),
-        child: EmptyState(icon: emptyIcon, title: 'Sin registros', message: 'Aún no se ha capturado nada.'),
-      );
-    }
-    final rows = perProject.where((r) => r.$2 > 0).toList()..sort((a, b) => b.$2.compareTo(a.$2));
-    final max = rows.first.$2;
-    return ListView(
-      shrinkWrap: true,
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      children: [
-        DonutChart(
-          segments: segments.where((s) => s.$2 > 0).toList(),
-          centerValue: total.toInt().toString(),
-          centerLabel: 'total',
-        ),
-        const SizedBox(height: 22),
-        const SectionLabel('Por proyecto'),
-        for (final r in rows) ...[
-          GlassCard(
-            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
-            onTap: () {
-              Navigator.of(context).pop();
-              push(context, ProjectDetailScreen(project: r.$1));
-            },
-            child: Row(
-              children: [
-                Expanded(
-                  child: LinearMeter(
-                    label: r.$1.name,
-                    value: r.$2 / max,
-                    color: color,
-                    showPct: false,
-                    trailingText: '${r.$2}',
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ],
     );
   }
 }
