@@ -17,6 +17,7 @@ import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/data/survey/template.dart';
 import 'package:proyecto_app/data/survey/visit_engine.dart';
 import 'package:proyecto_app/data/survey_store.dart';
+import 'package:proyecto_app/features/shell/home_shell.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'test_helpers.dart';
@@ -214,6 +215,33 @@ void main() {
       await store.reopenVisit(v);
       expect(v.finished, isFalse);
       expect(proj.status, ProjectStatus.conCorrecciones);
+    });
+
+    test('los pendientes obligatorios sólo cuentan visitas en curso', () async {
+      final store = await initTestStore();
+      final proj = await seedProject(store);
+      expect(store.blockingPendingsOf(proj.id), 0, reason: 'visita sin iniciar');
+
+      final started = await seedProject(store, start: true);
+      final v = store.latestVisit(started.id)!;
+      expect(store.blockingPendingsOf(started.id), store.engineFor(v).blockingCount);
+      expect(store.blockingPendingsOf(started.id), greaterThan(0));
+
+      await store.finishVisit(v, const GeoPoint(26, -98));
+      expect(store.blockingPendingsOf(started.id), 0, reason: 'visita finalizada');
+    });
+
+    test('el inicio abre Proyectos con el filtro de pendientes', () {
+      HomeNav.tab.value = 0;
+      HomeNav.openProjects(filter: 'Con pendientes');
+      expect(HomeNav.tab.value, 1);
+      expect(HomeNav.projectsFilter.value, 'Con pendientes');
+
+      HomeNav.openVisits();
+      expect(HomeNav.tab.value, 2);
+
+      HomeNav.openProjects();
+      expect(HomeNav.projectsFilter.value, 'Todos');
     });
 
     test('borrar el proyecto elimina visitas, respuestas y archivos', () async {

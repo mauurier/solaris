@@ -11,6 +11,23 @@ import '../profile/profile_screen.dart';
 import '../visits/visits_tab.dart';
 import 'quick_capture_sheet.dart';
 
+/// Cambio de pestaña desde otras pantallas, p. ej. los indicadores del inicio.
+class HomeNav {
+  HomeNav._();
+
+  static final tab = ValueNotifier<int>(0);
+
+  /// Filtro activo de la pestaña Proyectos.
+  static final projectsFilter = ValueNotifier<String>('Todos');
+
+  static void openProjects({String filter = 'Todos'}) {
+    projectsFilter.value = filter;
+    tab.value = 1;
+  }
+
+  static void openVisits() => tab.value = 2;
+}
+
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -19,8 +36,6 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  int _index = 0;
-
   static const _items = [
     (Icons.space_dashboard_rounded, Icons.space_dashboard_outlined, 'Inicio'),
     (Icons.folder_rounded, Icons.folder_outlined, 'Proyectos'),
@@ -29,25 +44,36 @@ class _HomeShellState extends State<HomeShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Cada sesión arranca en Inicio y sin filtros.
+    HomeNav.tab.value = 0;
+    HomeNav.projectsFilter.value = 'Todos';
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBody: true,
-      body: AppBackground(
-        child: IndexedStack(
-          index: _index,
-          children: [
-            DashboardScreen(onSeeProjects: () => setState(() => _index = 1)),
-            const ProjectsScreen(),
-            const VisitsTab(),
-            const ProfileScreen(),
-          ],
+    return ValueListenableBuilder<int>(
+      valueListenable: HomeNav.tab,
+      builder: (context, index, _) => Scaffold(
+        extendBody: true,
+        body: AppBackground(
+          child: IndexedStack(
+            index: index,
+            children: [
+              DashboardScreen(onSeeProjects: HomeNav.openProjects),
+              const ProjectsScreen(),
+              const VisitsTab(),
+              const ProfileScreen(),
+            ],
+          ),
         ),
-      ),
-      bottomNavigationBar: _NavBar(
-        index: _index,
-        items: _items,
-        onTap: (i) => setState(() => _index = i),
-        onCapture: () => showQuickCapture(context),
+        bottomNavigationBar: _NavBar(
+          index: index,
+          items: _items,
+          onTap: (i) => HomeNav.tab.value = i,
+          onCapture: () => showQuickCapture(context),
+        ),
       ),
     );
   }

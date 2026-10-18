@@ -507,6 +507,11 @@ class SurveyStore extends ChangeNotifier {
     return engineFor(v).overall.value;
   }
 
+  /// Pendientes obligatorios de las visitas en curso del proyecto.
+  int blockingPendingsOf(String projectId) => visitsOf(projectId)
+      .where((v) => v.started && !v.finished)
+      .fold(0, (a, v) => a + engineFor(v).blockingCount);
+
   Future<void> _touch(String projectId) async {
     final proj = project(projectId);
     if (proj == null) return;

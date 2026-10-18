@@ -21,10 +21,19 @@ class ProjectsScreen extends StatefulWidget {
 }
 
 class _ProjectsScreenState extends State<ProjectsScreen> {
-  String _filter = 'Todos';
   String _query = '';
 
-  static const _filters = ['Todos', 'Asignados', 'En captura', 'Por sincronizar', 'Con correcciones'];
+  static const _filters = [
+    'Todos',
+    'Con pendientes',
+    'Asignados',
+    'En captura',
+    'Por sincronizar',
+    'Con correcciones',
+  ];
+
+  // El filtro vive en HomeNav para que el inicio pueda abrir la pestaña ya filtrada.
+  String get _filter => HomeNav.projectsFilter.value;
 
   bool _matches(SurveyProject p) {
     final q = _query.toLowerCase();
@@ -35,6 +44,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         p.site.toLowerCase().contains(q);
     if (!text) return false;
     return switch (_filter) {
+      'Con pendientes' => SurveyStore.instance.blockingPendingsOf(p.id) > 0,
       'Asignados' => p.status == ProjectStatus.asignado || p.status == ProjectStatus.borrador,
       'En captura' => p.status == ProjectStatus.enCaptura,
       'Por sincronizar' => p.status == ProjectStatus.pendienteSync,
@@ -48,7 +58,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final state = AppState.instance;
     final store = SurveyStore.instance;
     return ListenableBuilder(
-      listenable: Listenable.merge([store, state]),
+      listenable: Listenable.merge([store, state, HomeNav.projectsFilter]),
       builder: (context, _) {
         final all = store.projectsFor(state.role, state.userName);
         final list = all.where(_matches).toList();
@@ -79,7 +89,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   onChanged: (v) => setState(() => _query = v),
                 ),
               ),
-              FilterChips(options: _filters, selected: _filter, onSelected: (v) => setState(() => _filter = v)),
+              FilterChips(options: _filters, selected: _filter, onSelected: (v) => HomeNav.projectsFilter.value = v),
               const SizedBox(height: 14),
               Expanded(
                 child: list.isEmpty
