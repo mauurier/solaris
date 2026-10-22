@@ -10,7 +10,17 @@ class SqlitePersistence implements Persistence {
   SqlitePersistence._(this._db);
   final Database _db;
 
-  static const _version = 1;
+  /// 2: tabla `project_types` (tipos de proyecto editables por el admin).
+  static const _version = 2;
+
+  static Future<void> _createTable(DatabaseExecutor db, String t) async {
+    await db.execute('CREATE TABLE IF NOT EXISTS $t ('
+        'id TEXT PRIMARY KEY, '
+        'parent TEXT, '
+        'data TEXT NOT NULL, '
+        'updated_at TEXT NOT NULL)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_${t}_parent ON $t(parent)');
+  }
 
   /// Abre (o crea) la base en [path]. En las pruebas se pasa una
   /// `DatabaseFactory` de sqflite_common_ffi.
@@ -24,12 +34,14 @@ class SqlitePersistence implements Persistence {
         onConfigure: (db) => db.rawQuery('PRAGMA journal_mode = WAL'),
         onCreate: (db, _) async {
           for (final t in Tables.all) {
-            await db.execute('CREATE TABLE $t ('
-                'id TEXT PRIMARY KEY, '
-                'parent TEXT, '
-                'data TEXT NOT NULL, '
-                'updated_at TEXT NOT NULL)');
-            await db.execute('CREATE INDEX idx_${t}_parent ON $t(parent)');
+            await _createTable(db, t);
+          }
+        },
+        // Una base creada por una versión anterior de la app sólo recibe las
+        // tablas que le faltan; los datos existentes no se tocan.
+        onUpgrade: (db, _, _) async {
+          for (final t in Tables.all) {
+            await _createTable(db, t);
           }
         },
       ),

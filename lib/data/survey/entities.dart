@@ -53,6 +53,21 @@ class DocCategory {
   static DocCategory byId(String id) => all.firstWhere((c) => c.id == id, orElse: () => all.last);
 }
 
+/// Tipo de proyecto (Viabilidad FV, Mantenimiento…). El admin los edita; el
+/// proyecto guarda el nombre, así que borrar un tipo no altera proyectos.
+class ProjectType {
+  ProjectType({required this.id, required this.name, required this.order});
+
+  final String id;
+  String name;
+  int order;
+
+  Map<String, Object?> toJson() => {'id': id, 'name': name, 'order': order};
+
+  static ProjectType fromJson(Map<String, Object?> j) =>
+      ProjectType(id: j['id'] as String, name: j['name'] as String, order: j['order'] as int? ?? 0);
+}
+
 class SurveyProject {
   SurveyProject({
     required this.id,

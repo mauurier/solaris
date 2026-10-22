@@ -284,6 +284,28 @@ void main() {
       expect(store.recentVisitFor('Diego Salas'), isNull);
     });
 
+    test('el admin agrega, renombra y elimina tipos de proyecto', () async {
+      final store = await initTestStore();
+      expect(store.validateProjectTypeName('  '), isNotNull);
+      expect(store.validateProjectTypeName('viabilidad fv'), isNotNull, reason: 'duplicado sin importar mayúsculas');
+
+      final maint = await store.addProjectType('  Mantenimiento correctivo ');
+      expect(maint.name, 'Mantenimiento correctivo');
+      expect(store.projectTypes.last, maint);
+
+      final proj = await seedProject(store); // usa 'Viabilidad FV'
+      final viab = store.projectTypes.firstWhere((t) => t.name == 'Viabilidad FV');
+      expect(store.projectTypeUses('Viabilidad FV'), 1);
+      await expectLater(store.removeProjectType(viab), throwsStateError, reason: 'está en uso');
+
+      await store.renameProjectType(viab, 'Viabilidad fotovoltaica');
+      expect(proj.type, 'Viabilidad fotovoltaica', reason: 'el proyecto sigue el nuevo nombre');
+      expect(store.validateProjectTypeName('Viabilidad fotovoltaica', except: viab), isNull);
+
+      await store.removeProjectType(maint);
+      expect(store.projectTypes.contains(maint), isFalse);
+    });
+
     test('el inicio abre Proyectos con el filtro de pendientes', () {
       HomeNav.tab.value = 0;
       HomeNav.openProjects(filter: 'Con pendientes');
@@ -341,6 +363,56 @@ void main() {
 
       await db2.removeByParent(Tables.answers, v2.id);
       expect(await db2.load(Tables.answers), isEmpty);
+      await db2.close();
+    });
+
+    test('una base de la versión anterior gana la tabla de tipos sin perder datos', () async {
+      final dir = Directory.systemTemp.createTempSync('solaris_mig_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = p.join(dir.path, 'solaris.db');
+
+      // Base v1 tal como la creaba la app antes: sin la tabla project_types.
+      final old = await databaseFactoryFfi.openDatabase(path,
+          options: OpenDatabaseOptions(
+            version: 1,
+            onCreate: (db, _) async {
+              for (final t in Tables.all.where((t) => t != Tables.projectTypes)) {
+                await db.execute(
+                    'CREATE TABLE $t (id TEXT PRIMARY KEY, parent TEXT, data TEXT NOT NULL, updated_at TEXT NOT NULL)');
+              }
+              await db.insert(Tables.projects, {
+                'id': 'p1',
+                'data': '{"marca":"dato previo"}',
+                'updated_at': DateTime(2026).toIso8601String(),
+              });
+            },
+          ));
+      await old.close();
+
+      final db = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
+      expect(await db.load(Tables.projectTypes), isEmpty);
+      expect((await db.load(Tables.projects)).single['marca'], 'dato previo');
+      await db.put(Tables.projectTypes, 't1', {'id': 't1', 'name': 'Mantenimiento FV', 'order': 0});
+      expect(await db.load(Tables.projectTypes), hasLength(1));
+      await db.close();
+    });
+
+    test('los tipos de proyecto se crean una sola vez y sobreviven a reabrir', () async {
+      final dir = Directory.systemTemp.createTempSync('solaris_types_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = p.join(dir.path, 'solaris.db');
+
+      final db1 = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
+      SurveyStore.reset();
+      final store1 = await SurveyStore.init(db1, FileStore(dir));
+      expect(store1.projectTypes.map((t) => t.name), SurveyStore.defaultProjectTypes);
+      await store1.addProjectType('Inspección termográfica');
+      await db1.close();
+
+      final db2 = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
+      SurveyStore.reset();
+      final store2 = await SurveyStore.init(db2, FileStore(dir));
+      expect(store2.projectTypes.map((t) => t.name), [...SurveyStore.defaultProjectTypes, 'Inspección termográfica']);
       await db2.close();
     });
   });

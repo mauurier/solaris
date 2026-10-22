@@ -11,6 +11,7 @@ import '../../data/survey/entities.dart';
 import '../../data/survey/template.dart';
 import '../../data/survey_store.dart';
 import '../../main.dart';
+import '../admin/project_types_screen.dart';
 import '../shell/home_shell.dart';
 import '../visits/question_field.dart';
 import 'project_detail_screen.dart';
@@ -27,7 +28,6 @@ class NewProjectScreen extends StatefulWidget {
 
 class _NewProjectScreenState extends State<NewProjectScreen> {
   static const _steps = ['Datos', 'Ubicación', 'Equipo', 'Plantilla y documentos'];
-  static const _types = ['Viabilidad FV', 'Levantamiento eléctrico', 'Auditoría FV'];
 
   final _store = SurveyStore.instance;
   int _step = 0;
@@ -41,7 +41,7 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
   final _description = TextEditingController();
 
   String? _client;
-  String _type = _types.first;
+  late String _type = _store.projectTypes.firstOrNull?.name ?? '';
   DateTime? _date;
   bool _locating = false;
 
@@ -58,6 +58,11 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
     super.dispose();
   }
 
+  Future<void> _addType() async {
+    final t = await showProjectTypeSheet(context);
+    if (t != null && mounted) setState(() => _type = t.name);
+  }
+
   String? get _stepError => switch (_step) {
         0 => _code.text.trim().isEmpty
             ? 'Escribe la clave del proyecto'
@@ -65,7 +70,9 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
                 ? 'Escribe el nombre del proyecto'
                 : _client == null
                     ? 'Elige el cliente'
-                    : null,
+                    : _type.isEmpty
+                        ? 'Elige el tipo de proyecto'
+                        : null,
         1 => _site.text.trim().isEmpty
             ? 'Escribe el nombre del sitio'
             : _coordsText.text.trim().isNotEmpty && GeoPoint.tryParse(_coordsText.text) == null
@@ -217,7 +224,11 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final t in _types) ChoicePill(label: t, selected: _type == t, onTap: () => setState(() => _type = t)),
+            for (final t in _store.projectTypes)
+              ChoicePill(label: t.name, selected: _type == t.name, onTap: () => setState(() => _type = t.name)),
+            // El admin puede crear el tipo que falte sin salir del alta.
+            if (AppState.instance.role == UserRole.admin)
+              ChoicePill(label: '+ Nuevo tipo', selected: false, onTap: _addType),
           ],
         ),
         const SizedBox(height: 18),

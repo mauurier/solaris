@@ -68,6 +68,10 @@ class SurveyStore extends ChangeNotifier {
   final visits = <FieldVisit>[];
   final _answers = <String, Map<String, String>>{};
   final evidences = <Evidence>[];
+  final projectTypes = <ProjectType>[];
+
+  /// Tipos con los que arranca una instalación nueva.
+  static const defaultProjectTypes = ['Viabilidad FV', 'Levantamiento eléctrico', 'Auditoría FV', 'Mantenimiento FV'];
 
   String get _user => AppState.instance.userName;
 
@@ -85,6 +89,13 @@ class SurveyStore extends ChangeNotifier {
       templates.add(t);
       await db.put(Tables.templates, t.id, t.toJson());
     }
+    projectTypes.addAll((await db.load(Tables.projectTypes)).map(ProjectType.fromJson));
+    if (projectTypes.isEmpty) {
+      for (final name in defaultProjectTypes) {
+        await _putProjectType(ProjectType(id: _uuid.v4(), name: name, order: projectTypes.length));
+      }
+    }
+    projectTypes.sort((a, b) => a.order.compareTo(b.order));
     projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   }
 
@@ -138,6 +149,57 @@ class SurveyStore extends ChangeNotifier {
     templates.remove(t);
     await db.remove(Tables.templates, t.id);
     notifyListeners();
+  }
+
+  // -------------------------------------------------------- tipos de proyecto
+
+  /// Proyectos que usan el tipo; sólo se puede borrar si no hay ninguno.
+  int projectTypeUses(String name) => projects.where((p) => p.type == name).length;
+
+  /// Motivo por el que [name] no es válido, o `null` si se puede usar.
+  String? validateProjectTypeName(String name, {ProjectType? except}) {
+    final n = name.trim();
+    if (n.isEmpty) return 'Escribe el nombre del tipo';
+    if (n.length > 40) return 'Usa 40 caracteres o menos';
+    final taken = projectTypes.any((t) => t != except && t.name.toLowerCase() == n.toLowerCase());
+    return taken ? 'Ya existe un tipo con ese nombre' : null;
+  }
+
+  Future<ProjectType> addProjectType(String name) async {
+    final error = validateProjectTypeName(name);
+    if (error != null) throw ArgumentError(error);
+    final order = projectTypes.fold(-1, (m, t) => t.order > m ? t.order : m) + 1;
+    final t = ProjectType(id: _uuid.v4(), name: name.trim(), order: order);
+    await _putProjectType(t);
+    notifyListeners();
+    return t;
+  }
+
+  /// Renombra el tipo y los proyectos que lo usan, para que no queden huérfanos.
+  Future<void> renameProjectType(ProjectType t, String name) async {
+    final error = validateProjectTypeName(name, except: t);
+    if (error != null) throw ArgumentError(error);
+    final old = t.name;
+    t.name = name.trim();
+    await db.put(Tables.projectTypes, t.id, t.toJson());
+    for (final p in projects.where((p) => p.type == old)) {
+      p.type = t.name;
+      await db.put(Tables.projects, p.id, p.toJson());
+    }
+    notifyListeners();
+  }
+
+  Future<void> removeProjectType(ProjectType t) async {
+    final uses = projectTypeUses(t.name);
+    if (uses > 0) throw StateError('El tipo se usa en $uses proyecto${uses == 1 ? '' : 's'}');
+    projectTypes.remove(t);
+    await db.remove(Tables.projectTypes, t.id);
+    notifyListeners();
+  }
+
+  Future<void> _putProjectType(ProjectType t) async {
+    projectTypes.add(t);
+    await db.put(Tables.projectTypes, t.id, t.toJson());
   }
 
   // ---------------------------------------------------------------- proyectos
