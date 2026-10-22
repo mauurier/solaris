@@ -10,6 +10,7 @@ import '../../data/survey/entities.dart';
 import '../../data/survey_store.dart';
 import '../../main.dart';
 import '../shell/home_shell.dart';
+import '../visits/visit_screen.dart';
 import 'new_project_screen.dart';
 import 'project_detail_screen.dart';
 
@@ -29,7 +30,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     'Asignados',
     'En captura',
     'Por sincronizar',
+    'En revisión',
     'Con correcciones',
+    'Aprobados',
+    'Cerrados',
   ];
 
   // El filtro vive en HomeNav para que el inicio pueda abrir la pestaña ya filtrada.
@@ -48,7 +52,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       'Asignados' => p.status == ProjectStatus.asignado || p.status == ProjectStatus.borrador,
       'En captura' => p.status == ProjectStatus.enCaptura,
       'Por sincronizar' => p.status == ProjectStatus.pendienteSync,
+      'En revisión' => p.status == ProjectStatus.enRevision,
       'Con correcciones' => p.status == ProjectStatus.conCorrecciones,
+      'Aprobados' => p.status == ProjectStatus.aprobado,
+      'Cerrados' => p.status == ProjectStatus.cerrado,
       _ => true,
     };
   }
@@ -63,8 +70,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         final all = store.projectsFor(state.role, state.userName);
         final list = all.where(_matches).toList();
         final canCreate = state.role == UserRole.admin || state.role == UserRole.supervisor;
+        final byClient = state.role == UserRole.admin;
 
-        return SafeArea(
+        final body = SafeArea(
           bottom: false,
           child: Column(
             children: [
@@ -72,15 +80,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 title: 'Proyectos',
                 subtitle: state.role == UserRole.tecnico
                     ? '${all.length} asignado${all.length == 1 ? '' : 's'} a ti'
-                    : '${all.length} proyecto${all.length == 1 ? '' : 's'} en este teléfono',
-                actions: [
-                  if (canCreate)
-                    HeaderIconButton(
-                      Icons.add_rounded,
-                      color: AppColors.accent,
-                      onTap: () => push(context, const NewProjectScreen(), fullscreenDialog: true),
-                    ),
-                ],
+                    : byClient
+                        ? '${all.length} proyecto${all.length == 1 ? '' : 's'} · ${_clientsOf(all).length} cliente${_clientsOf(all).length == 1 ? '' : 's'}'
+                        : '${all.length} proyecto${all.length == 1 ? '' : 's'} en este teléfono',
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
@@ -110,26 +112,195 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                               : null,
                         ),
                       )
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 110),
-                        itemCount: list.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 11),
-                        itemBuilder: (_, i) => ProjectRowCard(project: list[i], expanded: true),
-                      ),
+                    : byClient
+                        ? ListView(
+                            padding: EdgeInsets.fromLTRB(20, 0, 20, canCreate ? 180 : 110),
+                            children: [
+                              for (final client in _clientsOf(list)) ...[
+                                _ClientHeader(client: client, projects: list.where((p) => p.client == client).toList()),
+                                for (final p in list.where((p) => p.client == client)) ...[
+                                  ProjectRowCard(
+                                    project: p,
+                                    expanded: true,
+                                    onTap: () => showProjectVisitsSheet(context, p),
+                                  ),
+                                  const SizedBox(height: 11),
+                                ],
+                                const SizedBox(height: 10),
+                              ],
+                            ],
+                          )
+                        : ListView.separated(
+                            padding: EdgeInsets.fromLTRB(20, 0, 20, canCreate ? 180 : 110),
+                            itemCount: list.length,
+                            separatorBuilder: (_, _) => const SizedBox(height: 11),
+                            itemBuilder: (_, i) => ProjectRowCard(project: list[i], expanded: true),
+                          ),
               ),
             ],
           ),
         );
+
+        if (!canCreate) return body;
+        return Stack(
+          children: [
+            body,
+            // Botón destacado encima de la barra de navegación.
+            Positioned(
+              right: 20,
+              bottom: 96 + MediaQuery.of(context).padding.bottom,
+              child: _NewProjectButton(
+                onPressed: () => push(context, const NewProjectScreen(), fullscreenDialog: true),
+              ),
+            ),
+          ],
+        );
       },
+    );
+  }
+
+  /// Clientes en orden alfabético.
+  static List<String> _clientsOf(List<SurveyProject> list) =>
+      list.map((p) => p.client).toSet().toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+}
+
+class _NewProjectButton extends StatelessWidget {
+  const _NewProjectButton({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: AppColors.solarGradient,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(color: AppColors.accent.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 6)),
+          ],
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onPressed,
+          child: const Padding(
+            padding: EdgeInsets.fromLTRB(16, 14, 20, 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.add_rounded, size: 24, color: Color(0xFF1B1200)),
+                SizedBox(width: 8),
+                Text(
+                  'Nuevo proyecto',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1B1200)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
 
+/// Encabezado de cliente: nombre, proyectos y visitas.
+class _ClientHeader extends StatelessWidget {
+  const _ClientHeader({required this.client, required this.projects});
+  final String client;
+  final List<SurveyProject> projects;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = SurveyStore.instance;
+    final visits = projects.fold<int>(0, (a, p) => a + store.visitsOf(p.id).length);
+    final name = client.isEmpty ? 'Sin cliente' : client;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 4, 2, 10),
+      child: Row(
+        children: [
+          InitialsAvatar(name.substring(0, 1), size: 34, color: AppColors.blue),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: T.h3, maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text(
+                  '${projects.length} proyecto${projects.length == 1 ? '' : 's'} · '
+                  '$visits visita${visits == 1 ? '' : 's'}',
+                  style: T.tiny,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Resumen de un proyecto: cuántas visitas tiene y en qué estado está cada una.
+Future<void> showProjectVisitsSheet(BuildContext context, SurveyProject project) {
+  final store = SurveyStore.instance;
+  final visits = store.visitsOf(project.id);
+  final counts = <String, (int, Color)>{};
+  for (final v in visits) {
+    final label = visitStateLabel(v);
+    counts[label] = ((counts[label]?.$1 ?? 0) + 1, v.status.color);
+  }
+  return showAppSheet(
+    context,
+    title: project.name,
+    subtitle: '${project.client} · ${visits.length} visita${visits.length == 1 ? '' : 's'}',
+    child: ListView(
+      shrinkWrap: true,
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      children: [
+        if (visits.isEmpty)
+          const EmptyState(
+            icon: Icons.event_busy_rounded,
+            title: 'Sin visitas',
+            message: 'La primera visita se crea al asignar un técnico al proyecto.',
+          )
+        else ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final e in counts.entries) StatusPill('${e.key} · ${e.value.$1}', color: e.value.$2),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const SectionLabel('Visitas'),
+          for (final v in visits) ...[
+            VisitTile(visit: v),
+            const SizedBox(height: 10),
+          ],
+        ],
+        const SizedBox(height: 6),
+        AppButton(
+          'Abrir proyecto',
+          icon: Icons.open_in_new_rounded,
+          expand: true,
+          onPressed: () {
+            Navigator.of(context).pop();
+            push(context, ProjectDetailScreen(project: project));
+          },
+        ),
+      ],
+    ),
+  );
+}
+
 /// Tarjeta de proyecto reutilizada en listas.
 class ProjectRowCard extends StatelessWidget {
-  const ProjectRowCard({super.key, required this.project, this.expanded = false});
+  const ProjectRowCard({super.key, required this.project, this.expanded = false, this.onTap});
   final SurveyProject project;
   final bool expanded;
+
+  /// Por defecto abre el detalle del proyecto.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +308,7 @@ class ProjectRowCard extends StatelessWidget {
     final progress = store.progressOf(project);
     final color = project.status.color;
     return GlassCard(
-      onTap: () => push(context, ProjectDetailScreen(project: project)),
+      onTap: onTap ?? () => push(context, ProjectDetailScreen(project: project)),
       padding: const EdgeInsets.all(15),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

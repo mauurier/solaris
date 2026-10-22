@@ -1,0 +1,52 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:proyecto_app/data/mock_data.dart';
+import 'package:proyecto_app/data/models.dart';
+import 'package:proyecto_app/data/survey/entities.dart';
+import 'package:proyecto_app/features/shell/home_shell.dart';
+
+import 'test_helpers.dart';
+
+void main() {
+  testWidgets('El admin ve los proyectos por cliente y el resumen de visitas', (tester) async {
+    final store = await initTestStore();
+    final truper = await seedProject(store, start: true); // TRUPER, visita en captura
+    final springs = await seedProject(store);
+    springs
+      ..client = 'SPRINGS'
+      ..name = 'Springs Window Fashions';
+    await store.createVisit(springs, technician: 'Diego Salas', motive: 'Mediciones adicionales');
+    await store.finishVisit(store.latestVisit(truper.id)!, const GeoPoint(26, -98));
+    AppState.instance.setRole(UserRole.admin);
+
+    await pumpOnPhone(tester, const HomeShell());
+    HomeNav.openProjects();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nuevo proyecto'), findsOneWidget, reason: 'botón destacado para crear');
+    expect(find.text('SPRINGS'), findsOneWidget);
+    expect(find.text('1 proyecto · 2 visitas'), findsOneWidget);
+    expect(find.text('TRUPER'), findsOneWidget);
+    expect(find.text('1 proyecto · 1 visita'), findsOneWidget);
+
+    await tester.tap(find.text('Springs Window Fashions'));
+    await tester.pumpAndSettle();
+    expect(find.text('SPRINGS · 2 visitas'), findsOneWidget);
+    expect(find.text('Asignado · 2'), findsOneWidget, reason: 'cantidad por estado');
+    expect(find.text('Abrir proyecto'), findsOneWidget);
+  });
+
+  testWidgets('El filtro por estado sigue funcionando agrupado por cliente', (tester) async {
+    final store = await initTestStore();
+    final done = await seedProject(store, start: true);
+    await store.finishVisit(store.latestVisit(done.id)!, const GeoPoint(26, -98));
+    final other = await seedProject(store, start: true);
+    other.client = 'SPRINGS';
+    AppState.instance.setRole(UserRole.admin);
+
+    await pumpOnPhone(tester, const HomeShell());
+    HomeNav.openProjects(filter: 'Por sincronizar');
+    await tester.pumpAndSettle();
+    expect(find.text('TRUPER'), findsOneWidget);
+    expect(find.text('SPRINGS'), findsNothing, reason: 'su proyecto sigue en captura');
+  });
+}

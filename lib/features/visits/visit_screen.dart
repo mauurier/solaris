@@ -277,7 +277,7 @@ class _VisitScreenState extends State<VisitScreen> {
                       spacing: 7,
                       runSpacing: 6,
                       children: [
-                        StatusPill(v.finished ? 'Finalizada' : v.status.label, color: v.status.color, dense: true),
+                        StatusPill(visitStateLabel(v), color: v.status.color, dense: true),
                         if (blocking > 0)
                           StatusPill('$blocking obligatorios',
                               color: AppColors.danger, dense: true, icon: Icons.error_outline_rounded),
@@ -406,6 +406,9 @@ String _plural(String word) {
 }
 
 /// Tarjeta compacta de visita para listas (detalle de proyecto).
+/// Estado de la visita como se muestra en listas y resúmenes.
+String visitStateLabel(FieldVisit v) => v.finished ? 'Finalizada' : v.status.label;
+
 class VisitTile extends StatelessWidget {
   const VisitTile({super.key, required this.visit});
   final FieldVisit visit;
@@ -440,7 +443,7 @@ class VisitTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              StatusPill(v.finished ? 'Finalizada' : v.status.label, color: v.status.color, dense: true),
+              StatusPill(visitStateLabel(v), color: v.status.color, dense: true),
             ],
           ),
           const SizedBox(height: 12),
