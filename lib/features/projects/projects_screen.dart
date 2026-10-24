@@ -142,18 +142,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         );
 
         if (!canCreate) return body;
-        return Stack(
-          children: [
-            body,
-            // Botón destacado encima de la barra de navegación.
-            Positioned(
-              right: 20,
-              bottom: 96 + MediaQuery.of(context).padding.bottom,
-              child: _NewProjectButton(
-                onPressed: () => push(context, const NewProjectScreen(), fullscreenDialog: true),
-              ),
-            ),
-          ],
+        return withFloatingAction(
+          context,
+          body: body,
+          button: ProminentButton(
+            'Nuevo proyecto',
+            onPressed: () => push(context, const NewProjectScreen(), fullscreenDialog: true),
+          ),
         );
       },
     );
@@ -162,45 +157,6 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   /// Clientes en orden alfabético.
   static List<String> _clientsOf(List<SurveyProject> list) =>
       list.map((p) => p.client).toSet().toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-}
-
-class _NewProjectButton extends StatelessWidget {
-  const _NewProjectButton({required this.onPressed});
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Ink(
-        decoration: BoxDecoration(
-          gradient: AppColors.solarGradient,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(color: AppColors.accent.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 6)),
-          ],
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: onPressed,
-          child: const Padding(
-            padding: EdgeInsets.fromLTRB(16, 14, 20, 14),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.add_rounded, size: 24, color: Color(0xFF1B1200)),
-                SizedBox(width: 8),
-                Text(
-                  'Nuevo proyecto',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1B1200)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Encabezado de cliente: nombre, proyectos y visitas.

@@ -21,11 +21,24 @@ void showCreateSheet(BuildContext context) {
   );
 }
 
+/// Nueva visita: elegir el proyecto y abrir su alta de visita.
+void showNewVisitPicker(BuildContext context) {
+  showAppSheet(
+    context,
+    title: 'Nueva visita',
+    subtitle: 'Elige el proyecto al que pertenece la visita',
+    child: _CreateMenu(outer: context, visitOnly: true),
+  );
+}
+
 class _CreateMenu extends StatefulWidget {
-  const _CreateMenu({required this.outer});
+  const _CreateMenu({required this.outer, this.visitOnly = false});
 
   /// Contexto de la pantalla que abrió la hoja, para navegar al cerrarla.
   final BuildContext outer;
+
+  /// Abre directo en la elección de proyecto, sin el menú.
+  final bool visitOnly;
 
   @override
   State<_CreateMenu> createState() => _CreateMenuState();
@@ -33,7 +46,7 @@ class _CreateMenu extends StatefulWidget {
 
 class _CreateMenuState extends State<_CreateMenu> {
   final _store = SurveyStore.instance;
-  bool _pickingProject = false;
+  late bool _pickingProject = widget.visitOnly;
   String _query = '';
 
   void _open(Widget page) {
@@ -126,16 +139,17 @@ class _CreateMenuState extends State<_CreateMenu> {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
             child: Row(
               children: [
-                GestureDetector(
-                  onTap: () => setState(() {
-                    _pickingProject = false;
-                    _query = '';
-                  }),
-                  child: const Padding(
-                    padding: EdgeInsets.only(right: 10),
-                    child: Icon(Icons.arrow_back_rounded, size: 20, color: AppColors.textSecondary),
+                if (!widget.visitOnly)
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _pickingProject = false;
+                      _query = '';
+                    }),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 10),
+                      child: Icon(Icons.arrow_back_rounded, size: 20, color: AppColors.textSecondary),
+                    ),
                   ),
-                ),
                 Expanded(
                   child: AppSearchField(
                     hint: '¿Para qué proyecto es la visita?',

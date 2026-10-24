@@ -30,6 +30,58 @@ class HomeNav {
   static void openVisits() => tab.value = 2;
 }
 
+/// Coloca [button] abajo a la derecha, encima de la barra de navegación.
+Widget withFloatingAction(BuildContext context, {required Widget body, required Widget button}) {
+  return Stack(
+    children: [
+      body,
+      Positioned(right: 20, bottom: 96 + MediaQuery.of(context).padding.bottom, child: button),
+    ],
+  );
+}
+
+/// Botón de creación destacado, con el degradado de la marca.
+class ProminentButton extends StatelessWidget {
+  const ProminentButton(this.label, {super.key, required this.onPressed, this.icon = Icons.add_rounded});
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: AppColors.solarGradient,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(color: AppColors.accent.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 6)),
+          ],
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 20, 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 24, color: const Color(0xFF1B1200)),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1B1200)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
