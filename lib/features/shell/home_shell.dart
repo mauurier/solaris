@@ -10,6 +10,8 @@ import '../dashboard/dashboard_screen.dart';
 import '../projects/projects_screen.dart';
 import '../profile/profile_screen.dart';
 import '../visits/visits_tab.dart';
+import '../../data/survey_store.dart';
+import 'approvals_sheet.dart';
 import 'create_sheet.dart';
 import 'quick_capture_sheet.dart';
 
@@ -107,30 +109,43 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<int>(
-      valueListenable: HomeNav.tab,
-      builder: (context, index, _) => Scaffold(
-        extendBody: true,
-        body: AppBackground(
-          child: IndexedStack(
-            index: index,
-            children: [
-              DashboardScreen(onSeeProjects: HomeNav.openProjects),
-              const ProjectsScreen(),
-              const VisitsTab(),
-              const ProfileScreen(),
-            ],
-          ),
-        ),
-        bottomNavigationBar: _NavBar(
+    return ListenableBuilder(
+      // El rol y las visitas por aprobar cambian el botón central.
+      listenable: Listenable.merge([HomeNav.tab, AppState.instance, if (SurveyStore.isReady) SurveyStore.instance]),
+      builder: (context, _) => _scaffold(context, HomeNav.tab.value),
+    );
+  }
+
+  Widget _scaffold(BuildContext context, int index) {
+    final role = AppState.instance.role;
+    final isSupervisor = role == UserRole.supervisor;
+    final toApprove = isSupervisor && SurveyStore.isReady ? SurveyStore.instance.visitsToApprove.length : 0;
+    return Scaffold(
+      extendBody: true,
+      body: AppBackground(
+        child: IndexedStack(
           index: index,
-          items: _items,
-          onTap: (i) => HomeNav.tab.value = i,
-          // El admin no captura evidencia: su + crea proyectos y visitas.
-          onCapture: () => AppState.instance.role == UserRole.admin
-              ? showCreateSheet(context)
-              : showQuickCapture(context),
+          children: [
+            DashboardScreen(onSeeProjects: HomeNav.openProjects),
+            const ProjectsScreen(),
+            const VisitsTab(),
+            const ProfileScreen(),
+          ],
         ),
+      ),
+      bottomNavigationBar: _NavBar(
+        index: index,
+        items: _items,
+        onTap: (i) => HomeNav.tab.value = i,
+        // El admin no captura evidencia: su + crea proyectos y visitas. El
+        // supervisor tampoco: su ✓ abre lo que tiene por aprobar.
+        centerIcon: isSupervisor ? Icons.check_rounded : Icons.add_rounded,
+        badge: toApprove,
+        onCapture: () => switch (role) {
+          UserRole.admin => showCreateSheet(context),
+          UserRole.supervisor => showApprovalsSheet(context),
+          UserRole.tecnico => showQuickCapture(context),
+        },
       ),
     );
   }
@@ -142,12 +157,18 @@ class _NavBar extends StatelessWidget {
     required this.items,
     required this.onTap,
     required this.onCapture,
+    this.centerIcon = Icons.add_rounded,
+    this.badge = 0,
   });
 
   final int index;
   final List<(IconData, IconData, String)> items;
   final ValueChanged<int> onTap;
   final VoidCallback onCapture;
+  final IconData centerIcon;
+
+  /// Contador sobre el botón central; con 0 no se muestra.
+  final int badge;
 
   @override
   Widget build(BuildContext context) {
@@ -173,21 +194,45 @@ class _NavBar extends StatelessWidget {
                   children: [
                     GestureDetector(
                       onTap: onCapture,
-                      child: Container(
-                        width: 50,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          gradient: AppColors.solarGradient,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.accent.withValues(alpha: 0.35),
-                              blurRadius: 16,
-                              offset: const Offset(0, 5),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 50,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              gradient: AppColors.solarGradient,
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.accent.withValues(alpha: 0.35),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: const Icon(Icons.add_rounded, color: Color(0xFF1B1200), size: 25),
+                            child: Icon(centerIcon, color: const Color(0xFF1B1200), size: 25),
+                          ),
+                          if (badge > 0)
+                            Positioned(
+                              top: -6,
+                              right: -6,
+                              child: Container(
+                                constraints: const BoxConstraints(minWidth: 19),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.danger,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: const Color(0xFF0A0D12), width: 2),
+                                ),
+                                child: Text(
+                                  badge > 99 ? '99+' : '$badge',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ],

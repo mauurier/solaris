@@ -442,6 +442,10 @@ class SurveyStore extends ChangeNotifier {
   }
 
   /// El supervisor puede reabrir una visita cerrada para corregirla.
+  /// Visitas finalizadas que esperan aprobación, la más antigua primero.
+  List<FieldVisit> get visitsToApprove => visits.where((v) => v.state == VisitState.finalizada).toList()
+    ..sort((a, b) => a.endedAt!.compareTo(b.endedAt!));
+
   /// El supervisor aprueba una visita finalizada. El proyecto queda aprobado
   /// cuando todas sus visitas lo están.
   Future<void> approveVisit(FieldVisit v) async {
