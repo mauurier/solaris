@@ -70,7 +70,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         final all = store.projectsFor(state.role, state.userName);
         final list = all.where(_matches).toList();
         final canCreate = state.role == UserRole.admin || state.role == UserRole.supervisor;
-        final byClient = state.role == UserRole.admin;
+        final isField = state.role == UserRole.tecnico;
+        final byClient = state.role == UserRole.admin || isField;
+        // El técnico sólo cuenta y ve sus propias visitas, como en su pestaña Visitas.
+        final technician = isField ? state.userName : null;
 
         final body = SafeArea(
           bottom: false,
@@ -78,8 +81,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             children: [
               TabHeader(
                 title: 'Proyectos',
-                subtitle: state.role == UserRole.tecnico
-                    ? '${all.length} asignado${all.length == 1 ? '' : 's'} a ti'
+                subtitle: isField
+                    ? '${all.length} asignado${all.length == 1 ? '' : 's'} a ti · '
+                        '${_clientsOf(all).length} cliente${_clientsOf(all).length == 1 ? '' : 's'}'
                     : byClient
                         ? '${all.length} proyecto${all.length == 1 ? '' : 's'} · ${_clientsOf(all).length} cliente${_clientsOf(all).length == 1 ? '' : 's'}'
                         : '${all.length} proyecto${all.length == 1 ? '' : 's'} en este teléfono',
@@ -117,12 +121,16 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                             padding: EdgeInsets.fromLTRB(20, 0, 20, canCreate ? 180 : 110),
                             children: [
                               for (final client in _clientsOf(list)) ...[
-                                _ClientHeader(client: client, projects: list.where((p) => p.client == client).toList()),
+                                _ClientHeader(
+                                  client: client,
+                                  projects: list.where((p) => p.client == client).toList(),
+                                  technician: technician,
+                                ),
                                 for (final p in list.where((p) => p.client == client)) ...[
                                   ProjectRowCard(
                                     project: p,
                                     expanded: true,
-                                    onTap: () => showProjectVisitsSheet(context, p),
+                                    onTap: () => showProjectVisitsSheet(context, p, technician: technician),
                                   ),
                                   const SizedBox(height: 11),
                                 ],
@@ -161,14 +169,17 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
 /// Encabezado de cliente: nombre, proyectos y visitas.
 class _ClientHeader extends StatelessWidget {
-  const _ClientHeader({required this.client, required this.projects});
+  const _ClientHeader({required this.client, required this.projects, this.technician});
   final String client;
   final List<SurveyProject> projects;
+
+  /// Si se indica, sólo cuenta las visitas de ese técnico.
+  final String? technician;
 
   @override
   Widget build(BuildContext context) {
     final store = SurveyStore.instance;
-    final visits = projects.fold<int>(0, (a, p) => a + store.visitsOf(p.id).length);
+    final visits = projects.fold<int>(0, (a, p) => a + _visitsFor(store, p, technician).length);
     final name = client.isEmpty ? 'Sin cliente' : client;
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 4, 2, 10),
@@ -196,10 +207,14 @@ class _ClientHeader extends StatelessWidget {
   }
 }
 
+List<FieldVisit> _visitsFor(SurveyStore store, SurveyProject p, String? technician) =>
+    store.visitsOf(p.id).where((v) => technician == null || v.technician == technician).toList();
+
 /// Resumen de un proyecto: cuántas visitas tiene y en qué estado está cada una.
-Future<void> showProjectVisitsSheet(BuildContext context, SurveyProject project) {
+/// Con [technician], sólo las visitas asignadas a ese técnico.
+Future<void> showProjectVisitsSheet(BuildContext context, SurveyProject project, {String? technician}) {
   final store = SurveyStore.instance;
-  final visits = store.visitsOf(project.id);
+  final visits = _visitsFor(store, project, technician);
   final counts = <String, (int, Color)>{};
   for (final v in visits) {
     final label = visitStateLabel(v);
@@ -208,7 +223,8 @@ Future<void> showProjectVisitsSheet(BuildContext context, SurveyProject project)
   return showAppSheet(
     context,
     title: project.name,
-    subtitle: '${project.client} · ${visits.length} visita${visits.length == 1 ? '' : 's'}',
+    subtitle: '${project.client} · ${visits.length} visita${visits.length == 1 ? '' : 's'}'
+        '${technician == null ? '' : ' asignada${visits.length == 1 ? '' : 's'} a ti'}',
     child: ListView(
       shrinkWrap: true,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),

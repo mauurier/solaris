@@ -89,5 +89,44 @@ void main() {
     expect(find.text('Captura rápida'), findsOneWidget);
     expect(find.text('Crear'), findsNothing);
   });
+
+  testWidgets('El técnico ve sus proyectos por cliente y sólo sus visitas', (tester) async {
+    final store = await initTestStore();
+    final shared = await seedProject(store, start: true); // TRUPER, visita de Juan en captura
+    await store.createVisit(shared, technician: 'Diego Salas', motive: 'Mediciones adicionales');
+    final notMine = await seedProject(store);
+    notMine
+      ..client = 'SPRINGS'
+      ..technicians.clear();
+    AppState.instance.setRole(UserRole.tecnico); // Juan Pérez
+
+    await pumpOnPhone(tester, const HomeShell());
+    HomeNav.openProjects();
+    await tester.pumpAndSettle();
+    expect(find.text('TRUPER'), findsOneWidget);
+    expect(find.text('1 proyecto · 1 visita'), findsOneWidget, reason: 'no cuenta la visita de Diego');
+    expect(find.text('SPRINGS'), findsNothing, reason: 'no está asignado a Juan');
+    expect(find.text('Nuevo proyecto'), findsNothing, reason: 'el técnico no crea proyectos');
+
+    await tester.tap(find.text(shared.name).first);
+    await tester.pumpAndSettle();
+    expect(find.text('TRUPER · 1 visita asignada a ti'), findsOneWidget);
+    expect(find.text('En captura · 1'), findsOneWidget);
+    expect(find.text('Abrir proyecto'), findsOneWidget);
+  });
+
+  testWidgets('El técnico filtra sus proyectos por estado', (tester) async {
+    final store = await initTestStore();
+    await seedProject(store, start: true); // en captura
+    final waiting = await seedProject(store); // asignado
+    waiting.client = 'SPRINGS';
+    AppState.instance.setRole(UserRole.tecnico);
+
+    await pumpOnPhone(tester, const HomeShell());
+    HomeNav.openProjects(filter: 'Asignados');
+    await tester.pumpAndSettle();
+    expect(find.text('SPRINGS'), findsOneWidget);
+    expect(find.text('TRUPER'), findsNothing);
+  });
 }
 
