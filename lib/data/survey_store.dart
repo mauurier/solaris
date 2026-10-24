@@ -340,11 +340,13 @@ class SurveyStore extends ChangeNotifier {
   /// Visita que el usuario tiene iniciada y sin cerrar, si hay alguna.
   /// Visita en curso del técnico: la del último proyecto activo que abrió.
   /// Si aún no ha abierto ninguna, la iniciada más recientemente.
-  FieldVisit? activeVisitFor(String user) {
+  FieldVisit? activeVisitFor(String user) => activeVisitsFor(user).firstOrNull;
+
+  /// Visitas en curso del técnico, de la que abrió al último a la más antigua.
+  List<FieldVisit> activeVisitsFor(String user) {
     DateTime last(FieldVisit v) => v.openedAt ?? v.startedAt!;
-    final list = visits.where((v) => v.started && !v.finished && v.technician == user).toList()
+    return visits.where((v) => v.started && !v.finished && v.technician == user).toList()
       ..sort((a, b) => last(b).compareTo(last(a)));
-    return list.firstOrNull;
   }
 
   /// Visita de referencia del inicio del técnico: la en curso que abrió al

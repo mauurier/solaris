@@ -12,11 +12,31 @@ import '../../main.dart';
 import '../capture/evidence_actions.dart';
 import '../visits/visit_screen.dart';
 
+/// Fotos y videos de la plantilla que aún no se capturan en la visita.
+List<ResolvedQuestion> _pendingCaptures(SurveyStore store, FieldVisit v) {
+  final engine = store.engineFor(v);
+  return engine
+      .questions()
+      .where((rq) =>
+          (rq.question.type == QType.photo || rq.question.type == QType.video) && !engine.isAnswered(rq))
+      .toList()
+    ..sort((a, b) => (b.question.required ? 1 : 0) - (a.question.required ? 1 : 0));
+}
+
 /// Captura fuera de orden: muestra las fotos y videos que faltan en la visita
-/// en curso y abre la cámara directo en la pregunta elegida.
+/// en curso y abre la cámara directo en la pregunta elegida. Si el técnico
+/// tiene varias visitas en curso, primero elige en cuál capturar.
 void showQuickCapture(BuildContext context, {FieldVisit? visit}) {
   final store = SurveyStore.instance;
-  final v = visit ?? store.activeVisitFor(AppState.instance.userName);
+  final user = AppState.instance.userName;
+  if (visit == null) {
+    final running = store.activeVisitsFor(user);
+    if (running.length > 1) {
+      _pickVisit(context, running);
+      return;
+    }
+  }
+  final v = visit ?? store.activeVisitFor(user);
 
   if (v == null) {
     showAppSheet(
@@ -36,13 +56,7 @@ void showQuickCapture(BuildContext context, {FieldVisit? visit}) {
   }
 
   final project = store.project(v.projectId);
-  final engine = store.engineFor(v);
-  final pending = engine
-      .questions()
-      .where((rq) =>
-          (rq.question.type == QType.photo || rq.question.type == QType.video) && !engine.isAnswered(rq))
-      .toList()
-    ..sort((a, b) => (b.question.required ? 1 : 0) - (a.question.required ? 1 : 0));
+  final pending = _pendingCaptures(store, v);
 
   showAppSheet(
     context,
@@ -76,6 +90,69 @@ void showQuickCapture(BuildContext context, {FieldVisit? visit}) {
             },
           ),
         ],
+      ),
+    ),
+  );
+}
+
+/// Paso previo con dos o más visitas en curso: elegir la visita.
+void _pickVisit(BuildContext context, List<FieldVisit> running) {
+  final store = SurveyStore.instance;
+  showAppSheet(
+    context,
+    title: 'Captura rápida',
+    subtitle: 'Tienes ${running.length} visitas en curso: elige en cuál capturar',
+    child: ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.62),
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        itemCount: running.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        itemBuilder: (_, i) {
+          final v = running[i];
+          final missing = _pendingCaptures(store, v);
+          final required = missing.where((rq) => rq.question.required).length;
+          return GlassCard(
+            color: AppColors.surfaceAlt,
+            padding: const EdgeInsets.all(12),
+            onTap: () {
+              Navigator.pop(context);
+              // Elegirla cuenta como abrirla: queda como su visita en curso.
+              store.markVisitOpened(v, AppState.instance.userName);
+              showQuickCapture(context, visit: v);
+            },
+            child: Row(
+              children: [
+                const IconBadge(Icons.pending_actions_rounded, color: AppColors.accent, size: 38),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        store.project(v.projectId)?.name ?? '',
+                        style: T.h3,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text('${v.label} · ${v.motive}', style: T.tiny, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text(
+                        missing.isEmpty ? 'Sin fotos ni videos pendientes' : '${missing.length} por capturar',
+                        style: T.tiny,
+                      ),
+                    ],
+                  ),
+                ),
+                if (required > 0)
+                  StatusPill('$required obligatoria${required == 1 ? '' : 's'}', color: AppColors.danger, dense: true),
+                const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted),
+              ],
+            ),
+          );
+        },
       ),
     ),
   );
