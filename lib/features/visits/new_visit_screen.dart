@@ -4,15 +4,18 @@ import '../../core/services/formatting.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
+import '../../data/catalog.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
 import '../../data/survey/entities.dart';
+import '../../data/survey/template.dart';
 import '../../data/survey_store.dart';
+import '../admin/catalog_screen.dart';
 import '../shell/home_shell.dart';
 import 'question_field.dart';
 
-/// Visita adicional de un proyecto (información incompleta, mediciones
-/// adicionales, correcciones o actividades posteriores).
+/// Visita adicional de un proyecto. El motivo sale del catálogo que edita el
+/// admin, y la plantilla puede ser distinta a la del proyecto.
 class NewVisitScreen extends StatefulWidget {
   const NewVisitScreen({super.key, required this.project});
   final SurveyProject project;
@@ -22,22 +25,31 @@ class NewVisitScreen extends StatefulWidget {
 }
 
 class _NewVisitScreenState extends State<NewVisitScreen> {
-  static const motives = [
-    'Información incompleta',
-    'Mediciones adicionales',
-    'Corrección de información',
-    'Actividades posteriores',
-  ];
-
   late String _tech = widget.project.technicians.firstOrNull ??
       Mock.users.firstWhere((u) => u.role == UserRole.tecnico).name;
-  String _motive = motives.first;
+  final _store = SurveyStore.instance;
+  late String _motive = _store.catalog(CatalogKind.visitMotives).firstOrNull?.name ?? '';
+
+  /// La del proyecto si sigue activa; si no, la primera activa.
+  late TemplateDef? _template = _store.activeTemplates.where((t) => t.id == widget.project.templateId).firstOrNull ??
+      _store.activeTemplates.firstOrNull;
   DateTime? _date;
   bool _saving = false;
 
+  Future<void> _addMotive() async {
+    final m = await showCatalogItemSheet(context, CatalogKind.visitMotives);
+    if (m != null && mounted) setState(() => _motive = m.name);
+  }
+
   Future<void> _save() async {
+    if (_motive.isEmpty || _template == null) {
+      showAppSnack(context, _motive.isEmpty ? 'Elige el motivo de la visita' : 'Elige una plantilla',
+          icon: Icons.error_outline_rounded, color: AppColors.danger);
+      return;
+    }
     setState(() => _saving = true);
-    await SurveyStore.instance.createVisit(widget.project, technician: _tech, motive: _motive, scheduledAt: _date);
+    await _store.createVisit(widget.project,
+        technician: _tech, motive: _motive, scheduledAt: _date, templateId: _template!.id);
     if (!mounted) return;
     Navigator.pop(context);
     showAppSnack(context, 'Visita creada y asignada a $_tech', icon: Icons.check_circle_rounded, color: AppColors.success);
@@ -59,11 +71,47 @@ class _NewVisitScreenState extends State<NewVisitScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final m in motives)
-                ChoicePill(label: m, selected: _motive == m, onTap: () => setState(() => _motive = m)),
+              for (final m in _store.catalog(CatalogKind.visitMotives))
+                ChoicePill(label: m.name, selected: _motive == m.name, onTap: () => setState(() => _motive = m.name)),
+              // El admin puede crear el motivo que falte sin salir de la pantalla.
+              if (AppState.instance.role == UserRole.admin)
+                ChoicePill(label: '+ Nuevo motivo', selected: false, onTap: _addMotive),
             ],
           ),
           const SizedBox(height: 20),
+          const FieldLabel('Plantilla de levantamiento', required: true),
+          for (final t in _store.activeTemplates)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: GlassCard(
+                color: AppColors.surfaceAlt,
+                padding: const EdgeInsets.all(11),
+                borderColor: _template?.id == t.id ? AppColors.accent.withValues(alpha: 0.45) : null,
+                onTap: () => setState(() => _template = t),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(t.name, style: T.h3.copyWith(fontSize: 14)),
+                          const SizedBox(height: 3),
+                          Text(
+                            t.id == widget.project.templateId ? '${t.version} · la del proyecto' : t.version,
+                            style: T.tiny,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                        _template?.id == t.id ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                        size: 19,
+                        color: _template?.id == t.id ? AppColors.accent : AppColors.textMuted),
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
           const FieldLabel('Técnico asignado', required: true),
           ...techs.map((u) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),

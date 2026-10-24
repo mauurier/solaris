@@ -7,6 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:proyecto_app/core/services/export_service.dart';
 import 'package:proyecto_app/core/services/watermark.dart';
+import 'package:proyecto_app/data/catalog.dart';
 import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/storage/file_store.dart';
@@ -285,25 +286,49 @@ void main() {
     });
 
     test('el admin agrega, renombra y elimina tipos de proyecto', () async {
+      const types = CatalogKind.projectTypes;
       final store = await initTestStore();
-      expect(store.validateProjectTypeName('  '), isNotNull);
-      expect(store.validateProjectTypeName('viabilidad fv'), isNotNull, reason: 'duplicado sin importar mayúsculas');
+      expect(store.validateCatalogName(types, '  '), isNotNull);
+      expect(store.validateCatalogName(types, 'viabilidad fv'), isNotNull, reason: 'duplicado sin importar mayúsculas');
 
-      final maint = await store.addProjectType('  Mantenimiento correctivo ');
+      final maint = await store.addCatalogItem(types, '  Mantenimiento correctivo ');
       expect(maint.name, 'Mantenimiento correctivo');
-      expect(store.projectTypes.last, maint);
+      expect(store.catalog(types).last, maint);
 
       final proj = await seedProject(store); // usa 'Viabilidad FV'
-      final viab = store.projectTypes.firstWhere((t) => t.name == 'Viabilidad FV');
-      expect(store.projectTypeUses('Viabilidad FV'), 1);
-      await expectLater(store.removeProjectType(viab), throwsStateError, reason: 'está en uso');
+      final viab = store.catalog(types).firstWhere((t) => t.name == 'Viabilidad FV');
+      expect(store.catalogUses(types, 'Viabilidad FV'), 1);
+      await expectLater(store.removeCatalogItem(types, viab), throwsStateError, reason: 'está en uso');
 
-      await store.renameProjectType(viab, 'Viabilidad fotovoltaica');
+      await store.renameCatalogItem(types, viab, 'Viabilidad fotovoltaica');
       expect(proj.type, 'Viabilidad fotovoltaica', reason: 'el proyecto sigue el nuevo nombre');
-      expect(store.validateProjectTypeName('Viabilidad fotovoltaica', except: viab), isNull);
+      expect(store.validateCatalogName(types, 'Viabilidad fotovoltaica', except: viab), isNull);
 
-      await store.removeProjectType(maint);
-      expect(store.projectTypes.contains(maint), isFalse);
+      await store.removeCatalogItem(types, maint);
+      expect(store.catalog(types).contains(maint), isFalse);
+    });
+
+    test('la visita extra puede llevar otro motivo y otra plantilla', () async {
+      final store = await initTestStore();
+      final proj = await seedProject(store);
+      final other = await store.duplicateTemplate(store.templates.first);
+      const motives = CatalogKind.visitMotives;
+      final maint = await store.addCatalogItem(motives, 'Mantenimiento preventivo');
+
+      final v = await store.createVisit(proj, technician: 'Juan Pérez', motive: maint.name, templateId: other.id);
+      expect(v.templateId, other.id);
+      expect(proj.templateId, isNot(other.id), reason: 'el proyecto conserva su plantilla');
+      expect(store.templateFor(v).id, other.id);
+      expect(store.templateInUse(other), isTrue, reason: 'la usa una visita aunque no el proyecto');
+      await expectLater(store.deleteTemplate(other), throwsStateError);
+
+      final first = store.visitsOf(proj.id).firstWhere((x) => x.id != v.id);
+      expect(first.templateId, proj.templateId, reason: 'sin indicar plantilla usa la del proyecto');
+
+      expect(store.catalogUses(motives, maint.name), 1);
+      await store.renameCatalogItem(motives, maint, 'Mantenimiento');
+      expect(v.motive, 'Mantenimiento', reason: 'la visita sigue el nuevo nombre');
+      await expectLater(store.removeCatalogItem(motives, maint), throwsStateError, reason: 'está en uso');
     });
 
     test('el inicio abre Proyectos con el filtro de pendientes', () {
@@ -376,7 +401,7 @@ void main() {
           options: OpenDatabaseOptions(
             version: 1,
             onCreate: (db, _) async {
-              for (final t in Tables.all.where((t) => t != Tables.projectTypes)) {
+              for (final t in Tables.all.where((t) => t != Tables.projectTypes && t != Tables.visitMotives)) {
                 await db.execute(
                     'CREATE TABLE $t (id TEXT PRIMARY KEY, parent TEXT, data TEXT NOT NULL, updated_at TEXT NOT NULL)');
               }
@@ -391,6 +416,7 @@ void main() {
 
       final db = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
       expect(await db.load(Tables.projectTypes), isEmpty);
+      expect(await db.load(Tables.visitMotives), isEmpty);
       expect((await db.load(Tables.projects)).single['marca'], 'dato previo');
       await db.put(Tables.projectTypes, 't1', {'id': 't1', 'name': 'Mantenimiento FV', 'order': 0});
       expect(await db.load(Tables.projectTypes), hasLength(1));
@@ -398,6 +424,7 @@ void main() {
     });
 
     test('los tipos de proyecto se crean una sola vez y sobreviven a reabrir', () async {
+      const types = CatalogKind.projectTypes;
       final dir = Directory.systemTemp.createTempSync('solaris_types_');
       addTearDown(() => dir.deleteSync(recursive: true));
       final path = p.join(dir.path, 'solaris.db');
@@ -405,14 +432,14 @@ void main() {
       final db1 = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
       SurveyStore.reset();
       final store1 = await SurveyStore.init(db1, FileStore(dir));
-      expect(store1.projectTypes.map((t) => t.name), SurveyStore.defaultProjectTypes);
-      await store1.addProjectType('Inspección termográfica');
+      expect(store1.catalog(types).map((t) => t.name), SurveyStore.catalogDefaults[types]);
+      await store1.addCatalogItem(types, 'Inspección termográfica');
       await db1.close();
 
       final db2 = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
       SurveyStore.reset();
       final store2 = await SurveyStore.init(db2, FileStore(dir));
-      expect(store2.projectTypes.map((t) => t.name), [...SurveyStore.defaultProjectTypes, 'Inspección termográfica']);
+      expect(store2.catalog(types).map((t) => t.name), [...?SurveyStore.catalogDefaults[types], 'Inspección termográfica']);
       await db2.close();
     });
   });

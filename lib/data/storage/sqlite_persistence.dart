@@ -11,7 +11,8 @@ class SqlitePersistence implements Persistence {
   final Database _db;
 
   /// 2: tabla `project_types` (tipos de proyecto editables por el admin).
-  static const _version = 2;
+  /// 3: tabla `visit_motives` (motivos de visita editables por el admin).
+  static const _version = 3;
 
   static Future<void> _createTable(DatabaseExecutor db, String t) async {
     await db.execute('CREATE TABLE IF NOT EXISTS $t ('

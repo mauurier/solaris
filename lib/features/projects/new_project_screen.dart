@@ -11,7 +11,8 @@ import '../../data/survey/entities.dart';
 import '../../data/survey/template.dart';
 import '../../data/survey_store.dart';
 import '../../main.dart';
-import '../admin/project_types_screen.dart';
+import '../../data/catalog.dart';
+import '../admin/catalog_screen.dart';
 import '../shell/home_shell.dart';
 import '../visits/question_field.dart';
 import 'project_detail_screen.dart';
@@ -41,7 +42,7 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
   final _description = TextEditingController();
 
   String? _client;
-  late String _type = _store.projectTypes.firstOrNull?.name ?? '';
+  late String _type = _store.catalog(CatalogKind.projectTypes).firstOrNull?.name ?? '';
   DateTime? _date;
   bool _locating = false;
 
@@ -59,7 +60,7 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
   }
 
   Future<void> _addType() async {
-    final t = await showProjectTypeSheet(context);
+    final t = await showCatalogItemSheet(context, CatalogKind.projectTypes);
     if (t != null && mounted) setState(() => _type = t.name);
   }
 
@@ -224,7 +225,7 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final t in _store.projectTypes)
+            for (final t in _store.catalog(CatalogKind.projectTypes))
               ChoicePill(label: t.name, selected: _type == t.name, onTap: () => setState(() => _type = t.name)),
             // El admin puede crear el tipo que falte sin salir del alta.
             if (AppState.instance.role == UserRole.admin)

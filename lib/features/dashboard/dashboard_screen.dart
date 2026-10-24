@@ -10,7 +10,7 @@ import '../../data/survey/entities.dart';
 import '../../data/survey_store.dart';
 import '../../main.dart';
 import '../admin/clients_screen.dart';
-import '../admin/project_types_screen.dart';
+import '../admin/catalog_screen.dart';
 import '../admin/templates_screen.dart';
 import '../admin/users_screen.dart';
 import '../projects/new_project_screen.dart';
@@ -490,7 +490,7 @@ class _AdminTools extends StatelessWidget {
               const SizedBox(width: 10),
               _tile(context, Icons.business_rounded, 'Clientes', AppColors.blue, const ClientsScreen()),
               const SizedBox(width: 10),
-              _tile(context, Icons.category_rounded, 'Tipos', AppColors.teal, const ProjectTypesScreen()),
+              _tile(context, Icons.category_rounded, 'Catálogos', AppColors.teal, const CatalogsScreen()),
             ],
           ),
         ),

@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import 'catalog.dart';
 import 'mock_data.dart';
 import 'models.dart';
 import 'storage/file_store.dart';
@@ -68,10 +69,42 @@ class SurveyStore extends ChangeNotifier {
   final visits = <FieldVisit>[];
   final _answers = <String, Map<String, String>>{};
   final evidences = <Evidence>[];
-  final projectTypes = <ProjectType>[];
 
-  /// Tipos con los que arranca una instalación nueva.
-  static const defaultProjectTypes = ['Viabilidad FV', 'Levantamiento eléctrico', 'Auditoría FV', 'Mantenimiento FV'];
+  /// Valores con los que arranca cada catálogo en una instalación nueva.
+  static const catalogDefaults = {
+    CatalogKind.projectTypes: ['Viabilidad FV', 'Levantamiento eléctrico', 'Auditoría FV', 'Mantenimiento FV'],
+    CatalogKind.visitMotives: [
+      'Información incompleta',
+      'Mediciones adicionales',
+      'Corrección de información',
+      'Actividades posteriores',
+    ],
+  };
+
+  late final _catalogs = {
+    CatalogKind.projectTypes: Catalog(
+      db,
+      Tables.projectTypes,
+      uses: (name) => projects.where((p) => p.type == name).length,
+      renameUses: (from, to) async {
+        for (final p in projects.where((p) => p.type == from)) {
+          p.type = to;
+          await db.put(Tables.projects, p.id, p.toJson());
+        }
+      },
+    ),
+    CatalogKind.visitMotives: Catalog(
+      db,
+      Tables.visitMotives,
+      uses: (name) => visits.where((v) => v.motive == name).length,
+      renameUses: (from, to) async {
+        for (final v in visits.where((v) => v.motive == from)) {
+          v.motive = to;
+          await db.put(Tables.visits, v.id, v.toJson(), parent: v.projectId);
+        }
+      },
+    ),
+  };
 
   String get _user => AppState.instance.userName;
 
@@ -89,13 +122,9 @@ class SurveyStore extends ChangeNotifier {
       templates.add(t);
       await db.put(Tables.templates, t.id, t.toJson());
     }
-    projectTypes.addAll((await db.load(Tables.projectTypes)).map(ProjectType.fromJson));
-    if (projectTypes.isEmpty) {
-      for (final name in defaultProjectTypes) {
-        await _putProjectType(ProjectType(id: _uuid.v4(), name: name, order: projectTypes.length));
-      }
+    for (final e in _catalogs.entries) {
+      await e.value.load(catalogDefaults[e.key]!);
     }
-    projectTypes.sort((a, b) => a.order.compareTo(b.order));
     projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   }
 
@@ -105,7 +134,9 @@ class SurveyStore extends ChangeNotifier {
 
   List<TemplateDef> get activeTemplates => templates.where((t) => t.active).toList();
 
-  bool templateInUse(TemplateDef t) => projects.any((p) => p.templateId == t.id);
+  /// Una visita puede usar una plantilla distinta a la de su proyecto.
+  bool templateInUse(TemplateDef t) =>
+      projects.any((p) => p.templateId == t.id) || visits.any((v) => v.templateId == t.id);
 
   /// Guarda cambios del editor como versión menor nueva (v1.0 → v1.1).
   /// Las visitas ya iniciadas conservan su copia y no se ven afectadas.
@@ -145,61 +176,38 @@ class SurveyStore extends ChangeNotifier {
   }
 
   Future<void> deleteTemplate(TemplateDef t) async {
-    if (templateInUse(t)) throw StateError('La plantilla está asignada a proyectos');
+    if (templateInUse(t)) throw StateError('La plantilla está asignada a proyectos o visitas');
     templates.remove(t);
     await db.remove(Tables.templates, t.id);
     notifyListeners();
   }
 
-  // -------------------------------------------------------- tipos de proyecto
+  // ---------------------------------------------------------------- catálogos
 
-  /// Proyectos que usan el tipo; sólo se puede borrar si no hay ninguno.
-  int projectTypeUses(String name) => projects.where((p) => p.type == name).length;
+  List<CatalogItem> catalog(CatalogKind kind) => _catalogs[kind]!.items;
+
+  /// Registros que usan el nombre; sólo se puede borrar si no hay ninguno.
+  int catalogUses(CatalogKind kind, String name) => _catalogs[kind]!.uses(name);
 
   /// Motivo por el que [name] no es válido, o `null` si se puede usar.
-  String? validateProjectTypeName(String name, {ProjectType? except}) {
-    final n = name.trim();
-    if (n.isEmpty) return 'Escribe el nombre del tipo';
-    if (n.length > 40) return 'Usa 40 caracteres o menos';
-    final taken = projectTypes.any((t) => t != except && t.name.toLowerCase() == n.toLowerCase());
-    return taken ? 'Ya existe un tipo con ese nombre' : null;
-  }
+  String? validateCatalogName(CatalogKind kind, String name, {CatalogItem? except}) =>
+      _catalogs[kind]!.validate(name, except: except);
 
-  Future<ProjectType> addProjectType(String name) async {
-    final error = validateProjectTypeName(name);
-    if (error != null) throw ArgumentError(error);
-    final order = projectTypes.fold(-1, (m, t) => t.order > m ? t.order : m) + 1;
-    final t = ProjectType(id: _uuid.v4(), name: name.trim(), order: order);
-    await _putProjectType(t);
+  Future<CatalogItem> addCatalogItem(CatalogKind kind, String name) async {
+    final item = await _catalogs[kind]!.add(name);
     notifyListeners();
-    return t;
+    return item;
   }
 
-  /// Renombra el tipo y los proyectos que lo usan, para que no queden huérfanos.
-  Future<void> renameProjectType(ProjectType t, String name) async {
-    final error = validateProjectTypeName(name, except: t);
-    if (error != null) throw ArgumentError(error);
-    final old = t.name;
-    t.name = name.trim();
-    await db.put(Tables.projectTypes, t.id, t.toJson());
-    for (final p in projects.where((p) => p.type == old)) {
-      p.type = t.name;
-      await db.put(Tables.projects, p.id, p.toJson());
-    }
+  /// Renombra y actualiza los proyectos o visitas que usaban el nombre anterior.
+  Future<void> renameCatalogItem(CatalogKind kind, CatalogItem item, String name) async {
+    await _catalogs[kind]!.rename(item, name);
     notifyListeners();
   }
 
-  Future<void> removeProjectType(ProjectType t) async {
-    final uses = projectTypeUses(t.name);
-    if (uses > 0) throw StateError('El tipo se usa en $uses proyecto${uses == 1 ? '' : 's'}');
-    projectTypes.remove(t);
-    await db.remove(Tables.projectTypes, t.id);
+  Future<void> removeCatalogItem(CatalogKind kind, CatalogItem item) async {
+    await _catalogs[kind]!.remove(item);
     notifyListeners();
-  }
-
-  Future<void> _putProjectType(ProjectType t) async {
-    projectTypes.add(t);
-    await db.put(Tables.projectTypes, t.id, t.toJson());
   }
 
   // ---------------------------------------------------------------- proyectos
@@ -364,17 +372,19 @@ class SurveyStore extends ChangeNotifier {
     if (v != null) await markVisitOpened(v, user);
   }
 
+  /// Visita adicional. Por defecto usa la plantilla del proyecto, pero puede
+  /// llevar otra (p. ej. una de mantenimiento en un proyecto de viabilidad).
   Future<FieldVisit> createVisit(SurveyProject project,
-      {required String technician, required String motive, DateTime? scheduledAt}) async {
-    final v = await _createVisit(project, technician, motive, scheduledAt);
+      {required String technician, required String motive, DateTime? scheduledAt, String? templateId}) async {
+    final v = await _createVisit(project, technician, motive, scheduledAt, templateId: templateId);
     if (!project.technicians.contains(technician)) project.technicians.add(technician);
     project.status = ProjectStatus.asignado;
     await updateProject(project);
     return v;
   }
 
-  Future<FieldVisit> _createVisit(
-      SurveyProject project, String technician, String motive, DateTime? scheduledAt) async {
+  Future<FieldVisit> _createVisit(SurveyProject project, String technician, String motive, DateTime? scheduledAt,
+      {String? templateId}) async {
     final number = visitsOf(project.id).fold(0, (m, v) => v.number > m ? v.number : m) + 1;
     final v = FieldVisit(
       id: _uuid.v4(),
@@ -383,7 +393,7 @@ class SurveyStore extends ChangeNotifier {
       technician: technician,
       supervisor: project.supervisor,
       motive: motive,
-      templateId: project.templateId,
+      templateId: templateId ?? project.templateId,
       scheduledAt: scheduledAt,
     );
     visits.add(v);

@@ -20,8 +20,9 @@ class Tables {
   static const answers = 'answers';
   static const evidences = 'evidences';
   static const projectTypes = 'project_types';
+  static const visitMotives = 'visit_motives';
 
-  static const all = [templates, projects, documents, visits, answers, evidences, projectTypes];
+  static const all = [templates, projects, documents, visits, answers, evidences, projectTypes, visitMotives];
 }
 
 class MemoryPersistence implements Persistence {
