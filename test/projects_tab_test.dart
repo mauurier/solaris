@@ -33,7 +33,7 @@ void main() {
     await tester.tap(find.text('Springs Window Fashions'));
     await tester.pumpAndSettle();
     expect(find.text('SPRINGS · 2 visitas'), findsOneWidget);
-    expect(find.text('Asignado · 2'), findsOneWidget, reason: 'cantidad por estado');
+    expect(find.text('Por iniciar · 2'), findsOneWidget, reason: 'cantidad por estado');
     expect(find.text('Abrir proyecto'), findsOneWidget);
   });
 
@@ -111,7 +111,7 @@ void main() {
     await tester.tap(find.text(shared.name).first);
     await tester.pumpAndSettle();
     expect(find.text('TRUPER · 1 visita asignada a ti'), findsOneWidget);
-    expect(find.text('En captura · 1'), findsOneWidget);
+    expect(find.text('En curso · 1'), findsOneWidget);
     expect(find.text('Abrir proyecto'), findsOneWidget);
   });
 

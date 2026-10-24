@@ -217,8 +217,8 @@ Future<void> showProjectVisitsSheet(BuildContext context, SurveyProject project,
   final visits = _visitsFor(store, project, technician);
   final counts = <String, (int, Color)>{};
   for (final v in visits) {
-    final label = visitStateLabel(v);
-    counts[label] = ((counts[label]?.$1 ?? 0) + 1, v.status.color);
+    final label = v.state.label;
+    counts[label] = ((counts[label]?.$1 ?? 0) + 1, v.state.color);
   }
   return showAppSheet(
     context,

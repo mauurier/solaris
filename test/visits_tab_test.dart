@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:proyecto_app/core/widgets/ui.dart';
 import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
+import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
 import 'package:proyecto_app/features/visits/new_visit_screen.dart';
 
 import 'test_helpers.dart';
+
+/// Chip del filtro de estado (no la pastilla de una visita con el mismo texto).
+Finder chip(String label) => find.descendant(of: find.byType(FilterChips), matching: find.text(label));
 
 void main() {
   setUp(() => AppState.instance.setRole(UserRole.admin));
@@ -24,17 +29,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Nueva visita'), findsOneWidget, reason: 'botón destacado');
 
-    await tester.tap(find.text('Por iniciar').last);
+    await tester.tap(chip('Por iniciar'));
     await tester.pumpAndSettle();
     expect(find.text(running.name), findsNothing);
     expect(find.text(waiting.name), findsWidgets);
 
-    await tester.tap(find.text('En curso').last);
+    await tester.tap(chip('En curso'));
     await tester.pumpAndSettle();
     expect(find.text(running.name), findsOneWidget);
     expect(find.text(waiting.name), findsNothing);
 
-    await tester.tap(find.text('Todas'));
+    await tester.tap(chip('Todas'));
     await tester.enterText(find.byType(TextField), 'diego');
     await tester.pumpAndSettle();
     expect(find.text(waiting.name), findsOneWidget, reason: 'busca por técnico');
@@ -87,5 +92,37 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Nueva visita'), findsNothing);
     expect(find.text('Con pendientes'), findsNothing);
+  });
+
+  testWidgets('El técnico ve sus visitas por estado y filtra las aprobadas', (tester) async {
+    final store = await initTestStore();
+    final approvedProj = await seedProject(store, start: true);
+    final approved = store.latestVisit(approvedProj.id)!;
+    await store.finishVisit(approved, const GeoPoint(26, -98));
+    await store.approveVisit(approved);
+    final waiting = await seedProject(store);
+    waiting.name = 'Springs Window Fashions';
+    final other = await seedProject(store);
+    other.name = 'Visita de otro técnico';
+    await store.createVisit(other, technician: 'Diego Salas', motive: 'Mediciones adicionales');
+    store.visitsOf(other.id).firstWhere((v) => v.technician == 'Juan Pérez').technician = 'Ana Torres';
+    AppState.instance.setRole(UserRole.tecnico); // Juan Pérez
+
+    await pumpOnPhone(tester, const HomeShell());
+    HomeNav.openVisits();
+    await tester.pumpAndSettle();
+    expect(find.text('APROBADAS · 1'), findsOneWidget);
+    expect(find.text('POR INICIAR · 1'), findsOneWidget);
+    expect(find.text('Visita de otro técnico'), findsNothing, reason: 'sólo sus visitas');
+    expect(find.text('Con pendientes'), findsNothing, reason: 'filtros del técnico');
+    expect(find.text('Nueva visita'), findsNothing);
+
+    await tester.dragUntilVisible(chip('Aprobadas'), find.byType(FilterChips), const Offset(-150, 0));
+    await tester.pumpAndSettle(); // un toque durante el desplazamiento sólo lo detiene
+    await tester.tap(chip('Aprobadas'));
+    await tester.pumpAndSettle();
+    expect(find.text(approvedProj.name), findsOneWidget);
+    expect(find.text('Springs Window Fashions'), findsNothing);
+    expect(find.text('Aprobada'), findsOneWidget, reason: 'pastilla de estado');
   });
 }

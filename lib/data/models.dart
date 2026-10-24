@@ -83,6 +83,41 @@ extension ProjectStatusX on ProjectStatus {
       };
 }
 
+/// Estado de una visita tal como lo ve el usuario. Se deriva de sus fechas y
+/// de la aprobación del supervisor (ver `FieldVisit.state`).
+enum VisitState { porIniciar, enCurso, finalizada, aprobada }
+
+extension VisitStateX on VisitState {
+  String get label => switch (this) {
+        VisitState.porIniciar => 'Por iniciar',
+        VisitState.enCurso => 'En curso',
+        VisitState.finalizada => 'Finalizada',
+        VisitState.aprobada => 'Aprobada',
+      };
+
+  /// Plural para filtros y grupos.
+  String get plural => switch (this) {
+        VisitState.porIniciar => 'Por iniciar',
+        VisitState.enCurso => 'En curso',
+        VisitState.finalizada => 'Finalizadas',
+        VisitState.aprobada => 'Aprobadas',
+      };
+
+  Color get color => switch (this) {
+        VisitState.porIniciar => AppColors.blue,
+        VisitState.enCurso => AppColors.accent,
+        VisitState.finalizada => AppColors.warning,
+        VisitState.aprobada => AppColors.success,
+      };
+
+  IconData get icon => switch (this) {
+        VisitState.porIniciar => Icons.event_rounded,
+        VisitState.enCurso => Icons.pending_actions_rounded,
+        VisitState.finalizada => Icons.task_alt_rounded,
+        VisitState.aprobada => Icons.verified_rounded,
+      };
+}
+
 enum Severity { baja, media, alta, critica }
 
 extension SeverityX on Severity {

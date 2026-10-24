@@ -282,6 +282,18 @@ class FieldVisit {
       );
 }
 
+extension FieldVisitState on FieldVisit {
+  /// Finalizada espera la aprobación del supervisor; al reabrirla vuelve a
+  /// estar en curso.
+  VisitState get state => !started
+      ? VisitState.porIniciar
+      : !finished
+          ? VisitState.enCurso
+          : status == ProjectStatus.aprobado
+              ? VisitState.aprobada
+              : VisitState.finalizada;
+}
+
 enum EvidenceKind { photo, video, document, signature }
 
 /// Archivo capturado durante una visita y ligado a una pregunta de la plantilla.

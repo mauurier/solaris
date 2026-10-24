@@ -442,6 +442,19 @@ class SurveyStore extends ChangeNotifier {
   }
 
   /// El supervisor puede reabrir una visita cerrada para corregirla.
+  /// El supervisor aprueba una visita finalizada. El proyecto queda aprobado
+  /// cuando todas sus visitas lo están.
+  Future<void> approveVisit(FieldVisit v) async {
+    if (!v.finished) throw StateError('Sólo se aprueba una visita finalizada');
+    v.status = ProjectStatus.aprobado;
+    final proj = project(v.projectId);
+    if (proj != null && visitsOf(proj.id).every((x) => x.status == ProjectStatus.aprobado)) {
+      proj.status = ProjectStatus.aprobado;
+    }
+    await _saveVisit(v);
+    notifyListeners();
+  }
+
   Future<void> reopenVisit(FieldVisit v) async {
     v.endedAt = null;
     v.endPoint = null;

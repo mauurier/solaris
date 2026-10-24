@@ -59,6 +59,13 @@ class _VisitScreenState extends State<VisitScreen> {
     );
   }
 
+  Future<void> _approve() async {
+    await _store.approveVisit(v);
+    if (mounted) {
+      showAppSnack(context, 'Visita aprobada', icon: Icons.verified_rounded, color: AppColors.success);
+    }
+  }
+
   Future<void> _reopen() async {
     await _store.reopenVisit(v);
     if (mounted) showAppSnack(context, 'Visita reabierta para correcciones', icon: Icons.lock_open_rounded);
@@ -91,18 +98,32 @@ class _VisitScreenState extends State<VisitScreen> {
                   onPressed: _starting ? null : _start,
                 )
               : v.finished
-                  ? Row(
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          child: AppButton('Exportar ZIP',
-                              icon: Icons.folder_zip_rounded,
-                              expand: true,
-                              onPressed: () => push(context, ZipExportScreen(project: project))),
-                        ),
-                        if (canReopen) ...[
-                          const SizedBox(width: 10),
-                          AppButton('Reabrir', kind: AppButtonKind.secondary, onPressed: _reopen),
+                        // Supervisor y admin aprueban la visita finalizada.
+                        if (canReopen && v.state == VisitState.finalizada) ...[
+                          AppButton('Aprobar visita',
+                              icon: Icons.verified_rounded, expand: true, onPressed: _approve),
+                          const SizedBox(height: 10),
                         ],
+                        Row(
+                          children: [
+                            Expanded(
+                              child: AppButton('Exportar ZIP',
+                                  icon: Icons.folder_zip_rounded,
+                                  kind: canReopen && v.state == VisitState.finalizada
+                                      ? AppButtonKind.secondary
+                                      : AppButtonKind.primary,
+                                  expand: true,
+                                  onPressed: () => push(context, ZipExportScreen(project: project))),
+                            ),
+                            if (canReopen) ...[
+                              const SizedBox(width: 10),
+                              AppButton('Reabrir', kind: AppButtonKind.secondary, onPressed: _reopen),
+                            ],
+                          ],
+                        ),
                       ],
                     )
                   : AppButton(
@@ -265,7 +286,7 @@ class _VisitScreenState extends State<VisitScreen> {
         children: [
           Row(
             children: [
-              ProgressRing(value: overall.value, size: 78, stroke: 7, color: v.status.color),
+              ProgressRing(value: overall.value, size: 78, stroke: 7, color: v.state.color),
               const SizedBox(width: 18),
               Expanded(
                 child: Column(
@@ -277,7 +298,7 @@ class _VisitScreenState extends State<VisitScreen> {
                       spacing: 7,
                       runSpacing: 6,
                       children: [
-                        StatusPill(visitStateLabel(v), color: v.status.color, dense: true),
+                        StatusPill(v.state.label, color: v.state.color, dense: true),
                         if (blocking > 0)
                           StatusPill('$blocking obligatorios',
                               color: AppColors.danger, dense: true, icon: Icons.error_outline_rounded),
@@ -406,9 +427,6 @@ String _plural(String word) {
 }
 
 /// Tarjeta compacta de visita para listas (detalle de proyecto).
-/// Estado de la visita como se muestra en listas y resúmenes.
-String visitStateLabel(FieldVisit v) => v.finished ? 'Finalizada' : v.status.label;
-
 class VisitTile extends StatelessWidget {
   const VisitTile({super.key, required this.visit});
   final FieldVisit visit;
@@ -430,7 +448,7 @@ class VisitTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              IconBadge(Icons.event_note_rounded, color: v.status.color, size: 38),
+              IconBadge(v.state.icon, color: v.state.color, size: 38),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -443,11 +461,11 @@ class VisitTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              StatusPill(visitStateLabel(v), color: v.status.color, dense: true),
+              StatusPill(v.state.label, color: v.state.color, dense: true),
             ],
           ),
           const SizedBox(height: 12),
-          LinearMeter(label: 'Avance', value: progress, color: v.status.color),
+          LinearMeter(label: 'Avance', value: progress, color: v.state.color),
         ],
       ),
     );

@@ -331,6 +331,30 @@ void main() {
       await expectLater(store.removeCatalogItem(motives, maint), throwsStateError, reason: 'está en uso');
     });
 
+    test('el supervisor aprueba visitas finalizadas y el proyecto queda aprobado', () async {
+      final store = await initTestStore();
+      final proj = await seedProject(store, start: true);
+      final v1 = store.latestVisit(proj.id)!;
+      final v2 = await store.createVisit(proj, technician: 'Juan Pérez', motive: 'Mediciones adicionales');
+      expect(v2.state, VisitState.porIniciar);
+      expect(v1.state, VisitState.enCurso);
+      await expectLater(store.approveVisit(v1), throwsStateError, reason: 'aún no termina');
+
+      await store.finishVisit(v1, const GeoPoint(26, -98));
+      expect(v1.state, VisitState.finalizada);
+      await store.approveVisit(v1);
+      expect(v1.state, VisitState.aprobada);
+      expect(proj.status, isNot(ProjectStatus.aprobado), reason: 'falta la otra visita');
+
+      await store.startVisit(v2, null);
+      await store.finishVisit(v2, null);
+      await store.approveVisit(v2);
+      expect(proj.status, ProjectStatus.aprobado);
+
+      await store.reopenVisit(v2);
+      expect(v2.state, VisitState.enCurso, reason: 'reabrir quita la aprobación');
+    });
+
     test('el inicio abre Proyectos con el filtro de pendientes', () {
       HomeNav.tab.value = 0;
       HomeNav.openProjects(filter: 'Con pendientes');

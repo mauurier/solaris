@@ -10,8 +10,9 @@ import '../shell/create_sheet.dart';
 import '../shell/home_shell.dart';
 import 'visit_screen.dart';
 
-/// Pestaña de visitas: en curso, por iniciar y finalizadas. El admin además
-/// busca, filtra por estado y crea visitas desde aquí.
+/// Pestaña de visitas agrupadas por estado (en curso, por iniciar,
+/// finalizadas y aprobadas). Admin y técnico filtran por estado; el admin
+/// además busca y crea visitas desde aquí.
 class VisitsTab extends StatefulWidget {
   const VisitsTab({super.key});
 
@@ -23,7 +24,16 @@ class _VisitsTabState extends State<VisitsTab> {
   String _filter = 'Todas';
   String _query = '';
 
-  static const _filters = ['Todas', 'En curso', 'Por iniciar', 'Con pendientes', 'Finalizadas', 'Con correcciones'];
+  static const _adminFilters = [
+    'Todas',
+    'En curso',
+    'Por iniciar',
+    'Con pendientes',
+    'Finalizadas',
+    'Aprobadas',
+    'Con correcciones',
+  ];
+  static const _fieldFilters = ['Todas', 'En curso', 'Por iniciar', 'Finalizadas', 'Aprobadas'];
 
   bool _matches(FieldVisit v) {
     final store = SurveyStore.instance;
@@ -33,12 +43,13 @@ class _VisitsTabState extends State<VisitsTab> {
         [p?.name, p?.client, p?.code, v.technician, v.motive, v.label]
             .any((f) => f != null && f.toLowerCase().contains(q));
     if (!text) return false;
-    final running = v.started && !v.finished;
+    final running = v.state == VisitState.enCurso;
     return switch (_filter) {
       'En curso' => running,
-      'Por iniciar' => !v.started,
+      'Por iniciar' => v.state == VisitState.porIniciar,
       'Con pendientes' => running && store.engineFor(v).blockingCount > 0,
-      'Finalizadas' => v.finished,
+      'Finalizadas' => v.state == VisitState.finalizada,
+      'Aprobadas' => v.state == VisitState.aprobada,
       // Al reabrir una visita, su proyecto queda con correcciones.
       'Con correcciones' => running && p?.status == ProjectStatus.conCorrecciones,
       _ => true,
@@ -54,13 +65,15 @@ class _VisitsTabState extends State<VisitsTab> {
       builder: (context, _) {
         final mine = state.role == UserRole.tecnico;
         final isAdmin = state.role == UserRole.admin;
+        final filters = isAdmin ? _adminFilters : mine ? _fieldFilters : null;
         final all = store.visits.where((v) => !mine || v.technician == state.userName).toList();
-        final visits = isAdmin ? all.where(_matches).toList() : all;
-        final running = visits.where((v) => v.started && !v.finished).toList()
-          ..sort((a, b) => b.startedAt!.compareTo(a.startedAt!));
-        final pending = visits.where((v) => !v.started).toList()
+        final visits = filters == null ? all : all.where(_matches).toList();
+        List<FieldVisit> inState(VisitState s) => visits.where((v) => v.state == s).toList();
+        final running = inState(VisitState.enCurso)..sort((a, b) => b.startedAt!.compareTo(a.startedAt!));
+        final pending = inState(VisitState.porIniciar)
           ..sort((a, b) => (a.scheduledAt ?? DateTime(2100)).compareTo(b.scheduledAt ?? DateTime(2100)));
-        final done = visits.where((v) => v.finished).toList()..sort((a, b) => b.endedAt!.compareTo(a.endedAt!));
+        final done = inState(VisitState.finalizada)..sort((a, b) => b.endedAt!.compareTo(a.endedAt!));
+        final approved = inState(VisitState.aprobada)..sort((a, b) => b.endedAt!.compareTo(a.endedAt!));
 
         final body = SafeArea(
           bottom: false,
@@ -68,9 +81,10 @@ class _VisitsTabState extends State<VisitsTab> {
             children: [
               TabHeader(
                 title: 'Visitas',
-                subtitle: '${running.length} en curso · ${pending.length} por iniciar · ${done.length} finalizadas',
+                subtitle: '${running.length} en curso · ${pending.length} por iniciar · '
+                    '${done.length} finalizadas · ${approved.length} aprobadas',
               ),
-              if (isAdmin) ...[
+              if (isAdmin)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
                   child: AppSearchField(
@@ -78,7 +92,8 @@ class _VisitsTabState extends State<VisitsTab> {
                     onChanged: (v) => setState(() => _query = v),
                   ),
                 ),
-                FilterChips(options: _filters, selected: _filter, onSelected: (v) => setState(() => _filter = v)),
+              if (filters != null) ...[
+                FilterChips(options: filters, selected: _filter, onSelected: (v) => setState(() => _filter = v)),
                 const SizedBox(height: 4),
               ],
               Expanded(
@@ -103,9 +118,10 @@ class _VisitsTabState extends State<VisitsTab> {
                           message: 'Ninguna visita coincide con la búsqueda o el filtro.',
                         ),
                       ),
-                    ..._group('En curso', running),
-                    ..._group('Por iniciar', pending),
-                    ..._group('Finalizadas', done),
+                    ..._group(VisitState.enCurso, running),
+                    ..._group(VisitState.porIniciar, pending),
+                    ..._group(VisitState.finalizada, done),
+                    ..._group(VisitState.aprobada, approved),
                   ],
                 ),
               ),
@@ -123,12 +139,23 @@ class _VisitsTabState extends State<VisitsTab> {
     );
   }
 
-  List<Widget> _group(String title, List<FieldVisit> list) {
+  List<Widget> _group(VisitState state, List<FieldVisit> list) {
     if (list.isEmpty) return const [];
     final store = SurveyStore.instance;
     return [
       const SizedBox(height: 12),
-      SectionLabel('$title · ${list.length}'),
+      // El color del estado, igual que en la pastilla de cada visita.
+      Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            margin: const EdgeInsets.only(left: 2, right: 8, bottom: 10),
+            decoration: BoxDecoration(color: state.color, shape: BoxShape.circle),
+          ),
+          Expanded(child: SectionLabel('${state.plural} · ${list.length}')),
+        ],
+      ),
       for (final v in list) ...[
         Padding(
           padding: const EdgeInsets.only(bottom: 4, left: 2),
