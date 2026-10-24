@@ -36,8 +36,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     'Cerrados',
   ];
 
+  /// El supervisor filtra por estado de seguimiento en vez del estado del proyecto.
+  static final _supervisorFilters = ['Todos', ...FollowUpState.values.map((s) => s.plural)];
+
   // El filtro vive en HomeNav para que el inicio pueda abrir la pestaña ya filtrada.
   String get _filter => HomeNav.projectsFilter.value;
+
+  bool get _isSupervisor => AppState.instance.role == UserRole.supervisor;
 
   bool _matches(SurveyProject p) {
     final q = _query.toLowerCase();
@@ -47,6 +52,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         p.code.toLowerCase().contains(q) ||
         p.site.toLowerCase().contains(q);
     if (!text) return false;
+    if (_isSupervisor) {
+      final follow = FollowUpState.values.where((s) => s.plural == _filter).firstOrNull;
+      return follow == null || followUpStateOf(p) == follow;
+    }
     return switch (_filter) {
       'Con pendientes' => SurveyStore.instance.blockingPendingsOf(p.id) > 0,
       'Asignados' => p.status == ProjectStatus.asignado || p.status == ProjectStatus.borrador,
@@ -71,7 +80,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         final list = all.where(_matches).toList();
         final canCreate = state.role == UserRole.admin || state.role == UserRole.supervisor;
         final isField = state.role == UserRole.tecnico;
-        final byClient = state.role == UserRole.admin || isField;
+        final isSupervisor = state.role == UserRole.supervisor;
         // El técnico sólo cuenta y ve sus propias visitas, como en su pestaña Visitas.
         final technician = isField ? state.userName : null;
 
@@ -84,9 +93,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 subtitle: isField
                     ? '${all.length} asignado${all.length == 1 ? '' : 's'} a ti · '
                         '${_clientsOf(all).length} cliente${_clientsOf(all).length == 1 ? '' : 's'}'
-                    : byClient
-                        ? '${all.length} proyecto${all.length == 1 ? '' : 's'} · ${_clientsOf(all).length} cliente${_clientsOf(all).length == 1 ? '' : 's'}'
-                        : '${all.length} proyecto${all.length == 1 ? '' : 's'} en este teléfono',
+                    : '${all.length} proyecto${all.length == 1 ? '' : 's'} · '
+                        '${_clientsOf(all).length} cliente${_clientsOf(all).length == 1 ? '' : 's'}',
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
@@ -95,7 +103,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   onChanged: (v) => setState(() => _query = v),
                 ),
               ),
-              FilterChips(options: _filters, selected: _filter, onSelected: (v) => HomeNav.projectsFilter.value = v),
+              FilterChips(
+                options: isSupervisor ? _supervisorFilters : _filters,
+                selected: _filter,
+                onSelected: (v) => HomeNav.projectsFilter.value = v,
+              ),
               const SizedBox(height: 14),
               Expanded(
                 child: list.isEmpty
@@ -116,34 +128,28 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                               : null,
                         ),
                       )
-                    : byClient
-                        ? ListView(
-                            padding: EdgeInsets.fromLTRB(20, 0, 20, canCreate ? 180 : 110),
-                            children: [
-                              for (final client in _clientsOf(list)) ...[
-                                _ClientHeader(
-                                  client: client,
-                                  projects: list.where((p) => p.client == client).toList(),
-                                  technician: technician,
-                                ),
-                                for (final p in list.where((p) => p.client == client)) ...[
-                                  ProjectRowCard(
-                                    project: p,
-                                    expanded: true,
-                                    onTap: () => showProjectVisitsSheet(context, p, technician: technician),
-                                  ),
-                                  const SizedBox(height: 11),
-                                ],
-                                const SizedBox(height: 10),
-                              ],
+                    : ListView(
+                        padding: EdgeInsets.fromLTRB(20, 0, 20, canCreate ? 180 : 110),
+                        children: [
+                          for (final client in _clientsOf(list)) ...[
+                            _ClientHeader(
+                              client: client,
+                              projects: list.where((p) => p.client == client).toList(),
+                              technician: technician,
+                            ),
+                            for (final p in list.where((p) => p.client == client)) ...[
+                              ProjectRowCard(
+                                project: p,
+                                expanded: true,
+                                status: isSupervisor ? (followUpStateOf(p).label, followUpStateOf(p).color) : null,
+                                onTap: () => showProjectVisitsSheet(context, p, technician: technician),
+                              ),
+                              const SizedBox(height: 11),
                             ],
-                          )
-                        : ListView.separated(
-                            padding: EdgeInsets.fromLTRB(20, 0, 20, canCreate ? 180 : 110),
-                            itemCount: list.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 11),
-                            itemBuilder: (_, i) => ProjectRowCard(project: list[i], expanded: true),
-                          ),
+                            const SizedBox(height: 10),
+                          ],
+                        ],
+                      ),
               ),
             ],
           ),
@@ -267,9 +273,12 @@ Future<void> showProjectVisitsSheet(BuildContext context, SurveyProject project,
 
 /// Tarjeta de proyecto reutilizada en listas.
 class ProjectRowCard extends StatelessWidget {
-  const ProjectRowCard({super.key, required this.project, this.expanded = false, this.onTap});
+  const ProjectRowCard({super.key, required this.project, this.expanded = false, this.onTap, this.status});
   final SurveyProject project;
   final bool expanded;
+
+  /// Estado a mostrar en lugar del estado del proyecto (p. ej. el de seguimiento).
+  final (String, Color)? status;
 
   /// Por defecto abre el detalle del proyecto.
   final VoidCallback? onTap;
@@ -278,7 +287,7 @@ class ProjectRowCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = SurveyStore.instance;
     final progress = store.progressOf(project);
-    final color = project.status.color;
+    final color = status?.$2 ?? project.status.color;
     return GlassCard(
       onTap: onTap ?? () => push(context, ProjectDetailScreen(project: project)),
       padding: const EdgeInsets.all(15),
@@ -319,7 +328,7 @@ class ProjectRowCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              StatusPill(project.status.label, color: color, dense: true),
+              StatusPill(status?.$1 ?? project.status.label, color: color, dense: true),
             ],
           ),
           const SizedBox(height: 14),
@@ -350,4 +359,43 @@ class ProjectRowCard extends StatelessWidget {
           ],
         ),
       );
+}
+
+/// Estado de seguimiento que ve el supervisor, calculado con las visitas.
+/// Si aplican varios, se muestra el primero de la lista (el más urgente).
+enum FollowUpState { sinAsignar, sinRevisar, enCurso, sinProgramar, porIniciar, aprobado }
+
+extension FollowUpStateX on FollowUpState {
+  String get label => switch (this) {
+        FollowUpState.sinAsignar => 'Sin asignar',
+        FollowUpState.sinRevisar => 'Sin revisar',
+        FollowUpState.enCurso => 'En curso',
+        FollowUpState.sinProgramar => 'Sin programar',
+        FollowUpState.porIniciar => 'Por iniciar',
+        FollowUpState.aprobado => 'Aprobado',
+      };
+
+  /// Nombre del filtro.
+  String get plural => this == FollowUpState.aprobado ? 'Aprobados' : label;
+
+  Color get color => switch (this) {
+        FollowUpState.sinAsignar => AppColors.danger,
+        FollowUpState.sinRevisar => AppColors.warning,
+        FollowUpState.enCurso => AppColors.accent,
+        FollowUpState.sinProgramar => AppColors.violet,
+        FollowUpState.porIniciar => AppColors.blue,
+        FollowUpState.aprobado => AppColors.success,
+      };
+}
+
+FollowUpState followUpStateOf(SurveyProject p) {
+  final visits = SurveyStore.instance.visitsOf(p.id);
+  bool any(VisitState s) => visits.any((v) => v.state == s);
+  final waiting = visits.where((v) => v.state == VisitState.porIniciar);
+  if (p.technicians.isEmpty || visits.isEmpty) return FollowUpState.sinAsignar;
+  if (any(VisitState.finalizada)) return FollowUpState.sinRevisar;
+  if (any(VisitState.enCurso)) return FollowUpState.enCurso;
+  if (waiting.isNotEmpty && waiting.every((v) => v.scheduledAt == null)) return FollowUpState.sinProgramar;
+  if (waiting.isNotEmpty) return FollowUpState.porIniciar;
+  return FollowUpState.aprobado;
 }

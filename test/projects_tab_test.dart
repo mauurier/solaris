@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:proyecto_app/core/widgets/ui.dart';
 import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
+import 'package:proyecto_app/features/projects/projects_screen.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
 import 'package:proyecto_app/features/visits/new_visit_screen.dart';
 
@@ -127,6 +129,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('SPRINGS'), findsOneWidget);
     expect(find.text('TRUPER'), findsNothing);
+  });
+
+  test('El estado de seguimiento del supervisor sale de las visitas', () async {
+    final store = await initTestStore();
+    final unassigned = await seedProject(store);
+    unassigned.technicians.clear();
+    expect(followUpStateOf(unassigned), FollowUpState.sinAsignar);
+
+    final waiting = await seedProject(store); // visita con fecha programada
+    expect(followUpStateOf(waiting), FollowUpState.porIniciar);
+    store.latestVisit(waiting.id)!.scheduledAt = null;
+    expect(followUpStateOf(waiting), FollowUpState.sinProgramar);
+
+    final running = await seedProject(store, start: true);
+    expect(followUpStateOf(running), FollowUpState.enCurso);
+
+    final v = store.latestVisit(running.id)!;
+    await store.finishVisit(v, const GeoPoint(26, -98));
+    expect(followUpStateOf(running), FollowUpState.sinRevisar);
+    await store.approveVisit(v);
+    expect(followUpStateOf(running), FollowUpState.aprobado);
+  });
+
+  testWidgets('El supervisor ve proyectos por cliente con su estado y sólo sus visitas', (tester) async {
+    final store = await initTestStore();
+    final toReview = await seedProject(store, start: true);
+    await store.finishVisit(store.latestVisit(toReview.id)!, const GeoPoint(26, -98));
+    final unassigned = await seedProject(store);
+    unassigned
+      ..client = 'SPRINGS'
+      ..name = 'Springs Window Fashions'
+      ..technicians.clear();
+    AppState.instance.setRole(UserRole.supervisor);
+
+    await pumpOnPhone(tester, const HomeShell());
+    HomeNav.openProjects();
+    await tester.pumpAndSettle();
+    expect(find.text('TRUPER'), findsOneWidget);
+    expect(find.text('SPRINGS'), findsOneWidget);
+    expect(find.text('Sin revisar'), findsWidgets, reason: 'pastilla del proyecto');
+    expect(find.text('Sin asignar'), findsWidgets);
+    expect(find.text('Nuevo proyecto'), findsOneWidget);
+
+    final chip = find.descendant(of: find.byType(FilterChips), matching: find.text('Sin revisar'));
+    await tester.dragUntilVisible(chip, find.byType(FilterChips), const Offset(-150, 0));
+    await tester.pumpAndSettle(); // un toque durante el desplazamiento sólo lo detiene
+    await tester.tap(chip);
+    await tester.pumpAndSettle();
+    expect(find.text('SPRINGS'), findsNothing);
+
+    await tester.tap(find.text(toReview.name));
+    await tester.pumpAndSettle();
+    expect(find.text('TRUPER · 1 visita'), findsOneWidget, reason: 'sólo las visitas de ese proyecto');
+    expect(find.text('Finalizada · 1'), findsOneWidget);
+    expect(find.text('Abrir proyecto'), findsOneWidget);
   });
 }
 
