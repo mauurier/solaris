@@ -4,11 +4,13 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/mock_data.dart';
+import '../../data/models.dart';
 import '../../main.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../projects/projects_screen.dart';
 import '../profile/profile_screen.dart';
 import '../visits/visits_tab.dart';
+import 'create_sheet.dart';
 import 'quick_capture_sheet.dart';
 
 /// Cambio de pestaña desde otras pantallas, p. ej. los indicadores del inicio.
@@ -72,7 +74,10 @@ class _HomeShellState extends State<HomeShell> {
           index: index,
           items: _items,
           onTap: (i) => HomeNav.tab.value = i,
-          onCapture: () => showQuickCapture(context),
+          // El admin no captura evidencia: su + crea proyectos y visitas.
+          onCapture: () => AppState.instance.role == UserRole.admin
+              ? showCreateSheet(context)
+              : showQuickCapture(context),
         ),
       ),
     );

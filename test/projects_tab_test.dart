@@ -1,8 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
+import 'package:proyecto_app/features/visits/new_visit_screen.dart';
 
 import 'test_helpers.dart';
 
@@ -49,4 +51,43 @@ void main() {
     expect(find.text('TRUPER'), findsOneWidget);
     expect(find.text('SPRINGS'), findsNothing, reason: 'su proyecto sigue en captura');
   });
+
+  /// El + central de la barra de navegación.
+  final navPlus = find.byWidgetPredicate((w) => w is Icon && w.icon == Icons.add_rounded && w.size == 25);
+
+  testWidgets('El + del admin crea una visita para un proyecto existente', (tester) async {
+    final store = await initTestStore();
+    final proj = await seedProject(store);
+    AppState.instance.setRole(UserRole.admin);
+
+    await pumpOnPhone(tester, const HomeShell());
+    await tester.tap(navPlus);
+    await tester.pumpAndSettle();
+    expect(find.text('Crear'), findsOneWidget);
+    expect(find.text('Nuevo proyecto'), findsOneWidget);
+
+    await tester.tap(find.text('Nueva visita'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'no existe');
+    await tester.pumpAndSettle();
+    expect(find.text('Sin coincidencias'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'reynosa');
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.text(proj.name)));
+    await tester.pumpAndSettle();
+    expect(find.byType(NewVisitScreen), findsOneWidget);
+    expect(find.text('Crear'), findsNothing, reason: 'la hoja se cierra');
+  });
+
+  testWidgets('El + del técnico sigue abriendo la captura rápida', (tester) async {
+    await initTestStore();
+    AppState.instance.setRole(UserRole.tecnico);
+    await pumpOnPhone(tester, const HomeShell());
+    await tester.tap(navPlus);
+    await tester.pumpAndSettle();
+    expect(find.text('Captura rápida'), findsOneWidget);
+    expect(find.text('Crear'), findsNothing);
+  });
 }
+
