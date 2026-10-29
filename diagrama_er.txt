@@ -1,0 +1,316 @@
+erDiagram
+    %% ===== Modelo para Supabase (PostgreSQL) =====
+    %% - Nombres en minúsculas: en Postgres las mayúsculas obligan a usar comillas.
+    %% - auth_users representa auth.users, que administra Supabase Auth
+    %%   (correo, contraseña, sesiones).
+    %% - Los ids son uuid y se generan en el teléfono, así se puede crear sin internet.
+    %% - Los archivos van a Supabase Storage (buckets: evidencias, documentos, reportes);
+    %%   las columnas ruta_* guardan la ruta dentro del bucket.
+    %% - Permisos por rol y vigencia del usuario con Row Level Security (RLS).
+    %% - creado_en / actualizado_en / eliminado_en sirven para sincronizar con el teléfono;
+    %%   eliminado_en es borrado lógico (el registro no se borra, se marca).
+    %% - Los estados son enum de PostgreSQL.
+    %% - La plantilla se guarda completa en jsonb; respuestas y evidencias
+    %%   identifican su pregunta con claves de texto. Transformadores, tableros y
+    %%   mediciones son preguntas de la plantilla y se guardan en respuesta.
+    %% - historial se llena con triggers de Postgres en cada insert, update y delete.
+    %% - hallazgo: (id_visita, codigo) es único.
+
+    %% ===== Personas y lugares =====
+    auth_users {
+        uuid id PK
+        text email "lo maneja Supabase Auth"
+    }
+    perfil {
+        uuid id PK, FK "mismo id que auth.users"
+        uuid creado_por FK "quién dio de alta la cuenta"
+        text nombre
+        text rol "enum: superadmin | admin | supervisor | tecnico"
+        boolean activo
+        date inicio_vigencia
+        date fin_vigencia "nulo = no vence"
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+    cliente {
+        uuid id PK
+        text razon_social
+        text rfc UK
+        text contacto
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+    sitio {
+        uuid id PK
+        uuid id_cliente FK
+        text nombre
+        text direccion
+        numeric latitud
+        numeric longitud
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+
+    %% ===== Proyecto y visitas =====
+    tipo_proyecto {
+        uuid id PK
+        text nombre UK
+        text descripcion "opcional"
+        int orden
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+    proyecto {
+        uuid id PK
+        uuid id_sitio FK
+        uuid id_tipo_proyecto FK
+        uuid id_supervisor FK
+        uuid id_plantilla FK "plantilla por defecto"
+        text codigo UK
+        text nombre
+        text descripcion
+        timestamptz fecha_programada
+        text estado "enum"
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+    proyecto_tecnico {
+        uuid id_proyecto PK, FK
+        uuid id_tecnico PK, FK
+        timestamptz creado_en
+        timestamptz eliminado_en
+    }
+    motivo_visita {
+        uuid id PK
+        text nombre UK
+        int orden
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+    visita {
+        uuid id PK
+        uuid id_proyecto FK
+        uuid id_tecnico FK
+        uuid id_supervisor FK
+        uuid id_motivo FK "nulo en la primera visita"
+        uuid id_plantilla FK
+        int numero
+        timestamptz fecha_programada
+        timestamptz fecha_inicio
+        timestamptz fecha_fin
+        numeric lat_inicio
+        numeric lng_inicio
+        numeric lat_fin
+        numeric lng_fin
+        text estado "enum"
+        text notas
+        timestamptz fecha_ultima_apertura
+        jsonb plantilla_usada "copia de la plantilla al capturar"
+        jsonb repeticiones "cuántas copias tiene cada grupo"
+        jsonb justificaciones "pendientes justificados"
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+
+    %% ===== Plantilla de levantamiento =====
+    plantilla {
+        uuid id PK
+        text nombre
+        text tipo
+        int version "sube en 1 con cada edición"
+        boolean activa
+        jsonb definicion "secciones, grupos y preguntas"
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+
+    %% ===== Captura en campo =====
+    respuesta {
+        uuid id PK
+        uuid id_visita FK
+        text clave_grupo
+        int numero_repeticion
+        text clave_pregunta
+        text valor
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+    evidencia {
+        uuid id PK
+        uuid id_visita FK
+        uuid id_usuario FK
+        uuid id_hallazgo FK "opcional"
+        text clave_grupo
+        int numero_repeticion
+        text clave_pregunta
+        text tipo "enum: foto | video | documento | firma"
+        text ruta_archivo "bucket evidencias"
+        text hash_archivo "evita duplicados"
+        text mime_type "image/jpeg, video/mp4..."
+        bigint tamano "bytes"
+        text nombre_original
+        timestamptz fecha_captura
+        numeric latitud
+        numeric longitud
+        text comentario
+        boolean importada
+        timestamptz subido_en "nulo = falta subir a Storage"
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+    documento {
+        uuid id PK
+        uuid id_proyecto FK
+        uuid id_usuario FK
+        text categoria "enum: recibo_cfe | unifilar | ingenieria | planos | cad | otro"
+        text ruta_archivo "bucket documentos"
+        text mime_type
+        bigint tamano "bytes"
+        text nombre_original
+        timestamptz subido_en "nulo = falta subir a Storage"
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+    hallazgo {
+        uuid id PK
+        uuid id_visita FK
+        uuid id_usuario FK
+        text codigo "HZ-001, único por visita"
+        text categoria "enum: electrico | estructural | cubierta | seguridad | termografico | documental | civil | otro"
+        text descripcion
+        text severidad "enum: baja | media | alta | critica"
+        text ubicacion
+        text recomendacion
+        text estado "enum: abierto | en revision | corregido | cerrado"
+        numeric latitud
+        numeric longitud
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+
+    %% ===== Revisión del supervisor =====
+    revision {
+        uuid id PK
+        uuid id_visita FK
+        uuid id_supervisor FK
+        text decision "enum: aprobada | con correcciones"
+        text observaciones
+        timestamptz creado_en
+    }
+    correccion {
+        uuid id PK
+        uuid id_revision FK
+        text descripcion
+        text estado "enum: pendiente | atendida"
+        timestamptz atendida_en
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+
+    %% ===== Reportes =====
+    plantilla_reporte {
+        uuid id PK
+        uuid id_cliente FK "nulo = formato general"
+        text nombre
+        text descripcion
+        text ruta_logotipo "bucket reportes"
+        jsonb diseno "portada, encabezado, pie, secciones, tablas, fotos, firmas, numeración"
+        boolean activa
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+    reporte {
+        uuid id PK
+        uuid id_proyecto FK
+        uuid id_visita FK "opcional: reporte de una visita"
+        uuid id_plantilla_reporte FK
+        uuid id_usuario FK
+        int version
+        text motivo_version "por qué se generó esta versión"
+        text estado "enum: borrador | final"
+        jsonb secciones "secciones incluidas"
+        text ruta_pdf "bucket reportes"
+        timestamptz creado_en
+        timestamptz actualizado_en
+        timestamptz eliminado_en
+    }
+
+    %% ===== Trazabilidad y configuración =====
+    historial {
+        uuid id PK
+        uuid id_usuario FK
+        uuid id_proyecto FK "opcional"
+        uuid id_visita FK "opcional"
+        text tabla "qué tabla cambió"
+        uuid id_registro "qué registro cambió"
+        text accion "enum: crear | editar | eliminar"
+        jsonb valores_antes
+        jsonb valores_despues
+        text descripcion "texto legible, ej. Visita aprobada"
+        timestamptz creado_en
+    }
+    configuracion {
+        text clave PK "ej. carpetas_zip, comentario_por_foto"
+        jsonb valor
+        text descripcion
+        uuid actualizado_por FK
+        timestamptz actualizado_en
+    }
+
+    %% ===== Relaciones =====
+    auth_users ||--|| perfil : "tiene"
+    perfil |o--o{ perfil : "da de alta"
+
+    cliente ||--o{ sitio : "tiene"
+    sitio ||--o{ proyecto : "alberga"
+    tipo_proyecto ||--o{ proyecto : "clasifica"
+    perfil ||--o{ proyecto : "supervisa"
+    plantilla ||--o{ proyecto : "plantilla por defecto"
+    proyecto ||--o{ proyecto_tecnico : "asigna"
+    perfil ||--o{ proyecto_tecnico : "está asignado"
+
+    proyecto ||--|{ visita : "tiene"
+    perfil ||--o{ visita : "realiza (técnico)"
+    perfil ||--o{ visita : "supervisa"
+    motivo_visita |o--o{ visita : "motiva"
+    plantilla ||--o{ visita : "se captura con"
+
+    visita ||--o{ respuesta : "registra"
+    visita ||--o{ evidencia : "registra"
+    perfil ||--o{ evidencia : "captura"
+    hallazgo |o--o{ evidencia : "se respalda con"
+
+    proyecto ||--o{ documento : "tiene"
+    perfil ||--o{ documento : "sube"
+
+    visita ||--o{ hallazgo : "detecta"
+    perfil ||--o{ hallazgo : "reporta"
+
+    visita ||--o{ revision : "se revisa en"
+    perfil ||--o{ revision : "revisa"
+    revision ||--o{ correccion : "solicita"
+
+    cliente |o--o{ plantilla_reporte : "formato propio"
+    plantilla_reporte ||--o{ reporte : "da formato"
+    proyecto ||--o{ reporte : "genera"
+    visita |o--o{ reporte : "se reporta en"
+    perfil ||--o{ reporte : "genera"
+
+    perfil ||--o{ historial : "realiza"
+    proyecto |o--o{ historial : "registra"
+    visita |o--o{ historial : "registra"
+    perfil |o--o{ configuracion : "modifica"
