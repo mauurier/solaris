@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
+import 'data/auth/auth_service.dart';
+import 'data/mock_data.dart';
 import 'data/survey_store.dart';
 import 'features/auth/login_screen.dart';
+import 'features/shell/home_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,15 +74,26 @@ class _Startup extends StatefulWidget {
 }
 
 class _StartupState extends State<_Startup> {
-  late Future<void> _init = _open();
+  late Future<Widget> _init = _open();
 
-  Future<void> _open() async {
+  /// Abre la base local y Supabase, y decide la primera pantalla: el inicio
+  /// si hay una sesión guardada válida, o el login.
+  Future<Widget> _open() async {
     if (!SurveyStore.isReady) await SurveyStore.initDefault();
+    await AuthService.init();
+    try {
+      final profile = await AuthService.instance.restore();
+      if (profile == null) return const LoginScreen();
+      AppState.instance.signIn(profile);
+      return const HomeShell();
+    } on AuthFailure catch (e) {
+      return LoginScreen(message: e.message);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
+    return FutureBuilder<Widget>(
       future: _init,
       builder: (context, snap) {
         if (snap.connectionState != ConnectionState.done) {
@@ -95,7 +109,7 @@ class _StartupState extends State<_Startup> {
                   children: [
                     const Icon(Icons.error_outline_rounded, size: 40, color: Colors.redAccent),
                     const SizedBox(height: 12),
-                    const Text('No se pudo abrir la base de datos local', textAlign: TextAlign.center),
+                    const Text('No se pudo iniciar la app', textAlign: TextAlign.center),
                     const SizedBox(height: 8),
                     SelectableText('${snap.error}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
                     const SizedBox(height: 16),
@@ -106,7 +120,7 @@ class _StartupState extends State<_Startup> {
             ),
           );
         }
-        return const LoginScreen();
+        return snap.data!;
       },
     );
   }

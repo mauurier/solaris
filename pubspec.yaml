@@ -45,6 +45,8 @@ dependencies:
   share_plus: ^13.3.0
   uuid: ^4.6.0
   video_player: ^2.14.0
+  supabase_flutter: ^2.18.3
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:

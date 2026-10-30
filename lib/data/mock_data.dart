@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
+import 'auth/profile.dart';
 import 'models.dart';
 
 /// Estado global del prototipo (sin backend, sólo datos simulados en memoria).
@@ -10,6 +11,9 @@ class AppState extends ChangeNotifier {
   UserRole role = UserRole.tecnico;
   String userName = 'Juan Pérez';
   String userInitials = 'JP';
+
+  /// Perfil de Supabase; nulo en el modo demo (sin cuenta).
+  Profile? profile;
   bool offlineMode = false;
   bool syncOnWifiOnly = true;
   bool autoSync = true;
@@ -17,7 +21,17 @@ class AppState extends ChangeNotifier {
   bool gpsStamp = true;
   double syncProgress = 0.68;
 
+  void signIn(Profile p) {
+    profile = p;
+    role = p.uiRole;
+    userName = p.name;
+    userInitials = p.initials;
+    notifyListeners();
+  }
+
+  /// Modo demo: entra con un rol y un usuario de ejemplo, sin cuenta.
   void setRole(UserRole r) {
+    profile = null;
     role = r;
     switch (r) {
       case UserRole.admin:

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/services/formatting.dart';
 import '../../core/widgets/ui.dart';
+import '../../data/auth/auth_service.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
 import '../../data/survey_store.dart';
@@ -65,9 +67,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(_state.userName, style: T.h2),
+                            if (_state.profile case final p?) ...[
+                              const SizedBox(height: 2),
+                              Text(p.email, style: T.tiny),
+                            ],
                             const SizedBox(height: 5),
-                            StatusPill(_state.role.label,
+                            StatusPill(_state.profile?.isSuperadmin == true ? 'Superadmin' : _state.role.label,
                                 color: _state.role.color, icon: _state.role.icon, dense: true),
+                            if (_state.profile?.endsOn case final fin?) ...[
+                              const SizedBox(height: 5),
+                              Text('Cuenta vigente hasta el ${fmtDate(fin)}', style: T.tiny),
+                            ],
                           ],
                         ),
                       ),
@@ -265,10 +275,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               icon: Icons.logout_rounded,
               kind: AppButtonKind.danger,
               expand: true,
-              onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-                appRoute(const LoginScreen()),
-                (r) => false,
-              ),
+              onPressed: () async {
+                await AuthService.instance.signOut();
+                if (!context.mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(appRoute(const LoginScreen()), (r) => false);
+              },
             ),
           ),
         ],

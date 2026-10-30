@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:proyecto_app/data/auth/auth_service.dart';
 import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/main.dart';
@@ -30,8 +32,27 @@ Future<void> _pumpApp(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Las pruebas no tienen cuentas de Supabase: entran con el modo demo.
+Future<void> _enterDemo(WidgetTester tester) async {
+  final demo = find.text('Entrar como Técnico de ejemplo');
+  await tester.ensureVisible(demo);
+  await tester.tap(demo);
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  setUp(() => AppState.instance.setRole(UserRole.tecnico));
+  // Supabase se abre una vez fuera de las pruebas de widgets: sus timers de
+  // renovación de sesión no deben quedar dentro del reloj falso de cada prueba.
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    await AuthService.init();
+  });
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    AppState.instance.setRole(UserRole.tecnico);
+  });
 
   testWidgets('La pantalla de acceso se muestra al iniciar', (tester) async {
     await initTestStore();
@@ -45,8 +66,7 @@ void main() {
     await initTestStore();
     await _pumpApp(tester);
 
-    await tester.tap(find.text('Iniciar sesión'));
-    await tester.pumpAndSettle();
+    await _enterDemo(tester);
 
     expect(find.textContaining('Hola,'), findsOneWidget);
     expect(find.text('Sin visitas pendientes'), findsOneWidget);
@@ -57,8 +77,7 @@ void main() {
     await seedProject(store, start: true);
     await _pumpApp(tester);
 
-    await tester.tap(find.text('Iniciar sesión'));
-    await tester.pumpAndSettle();
+    await _enterDemo(tester);
 
     await tester.tap(find.text('VISITA EN CURSO'));
     await tester.pumpAndSettle();
@@ -75,8 +94,7 @@ void main() {
     await seedProject(store, start: true);
     await _pumpApp(tester);
 
-    await tester.tap(find.text('Iniciar sesión'));
-    await tester.pumpAndSettle();
+    await _enterDemo(tester);
     await tester.tap(find.text('VISITA EN CURSO'));
     await tester.pumpAndSettle();
 
