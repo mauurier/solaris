@@ -1,0 +1,6 @@
+project_id = "gphsalcyqoxeactjbtzq"
+
+# La función revisa la sesión por su cuenta (getUser + es_superadmin), así
+# funciona igual con las llaves nuevas sb_publishable / sb_secret.
+[functions.crear-usuario]
+verify_jwt = false
