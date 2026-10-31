@@ -114,6 +114,27 @@ class Catalog {
     await _db.remove(table, item.id);
   }
 
+  /// Aplica lo que llegó del servidor (ya en formato local).
+  Future<void> merge(List<Map<String, Object?>> rows, Iterable<String> removed) async {
+    for (final r in rows) {
+      final item = CatalogItem.fromJson(r);
+      final old = byId(item.id);
+      if (old == null) {
+        items.add(item);
+      } else {
+        old
+          ..name = item.name
+          ..order = item.order;
+      }
+      await _db.put(table, item.id, item.toJson(), pending: false);
+    }
+    for (final id in removed) {
+      items.removeWhere((t) => t.id == id);
+      await _db.forget(table, id);
+    }
+    items.sort((a, b) => a.order.compareTo(b.order));
+  }
+
   Future<void> _put(CatalogItem item) async {
     items.add(item);
     await _db.put(table, item.id, item.toJson());

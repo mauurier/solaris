@@ -89,6 +89,15 @@ class _NewVisitScreenState extends State<NewVisitScreen> {
           ),
           const SizedBox(height: 20),
           const FieldLabel('Plantilla de levantamiento', required: true),
+          if (_store.activeTemplates.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Todavía no hay plantillas en el teléfono. Bajan del servidor al iniciar sesión o al deslizar '
+                'hacia abajo en Proyectos.',
+                style: T.small,
+              ),
+            ),
           for (final t in _store.activeTemplates)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),

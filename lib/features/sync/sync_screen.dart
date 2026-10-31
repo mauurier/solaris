@@ -185,7 +185,7 @@ class _SyncScreenState extends State<SyncScreen> {
                 'Sólo con Wi-Fi',
                 'Evita consumo de datos móviles con videos',
                 _state.syncOnWifiOnly,
-                (v) => setState(() => _state.syncOnWifiOnly = v),
+                (v) => setState(() => _state.setSyncOnWifiOnly(v)),
               ),
               const Divider(),
               _switchRow(

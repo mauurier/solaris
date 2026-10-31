@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' show ClientException;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../mock_data.dart';
+import '../remote_errors.dart';
 import '../models.dart';
 import 'auth_service.dart';
 import 'profile.dart';
@@ -174,24 +173,7 @@ class UserDirectory extends ChangeNotifier {
     return {'Authorization': 'Bearer ${session.accessToken}'};
   }
 
-  static String _message(Object e) => switch (e) {
-    AuthFailure(:final message) => message,
-    FunctionsFetchException() => _offline,
-    FunctionException(:final details, :final status) => _functionMessage(details, status),
-    PostgrestException(:final message) => message,
-    AuthRetryableFetchException() || SocketException() || ClientException() || TimeoutException() => _offline,
-    AuthException(:final message) => message,
-    _ => '$e',
-  };
-
-  /// La función responde `{error, detalles?}`.
-  static String _functionMessage(dynamic details, int status) {
-    if (details is Map && details['error'] is String) {
-      final extra = details['detalles'];
-      return extra is List && extra.isNotEmpty ? '${details['error']}: ${extra.join(', ')}.' : '${details['error']}.';
-    }
-    return 'Error del servidor ($status).';
-  }
+  static String _message(Object e) => remoteErrorMessage(e, offline: _offline);
 
   static String _date(DateTime d) => d.toIso8601String().substring(0, 10);
 }

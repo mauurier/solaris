@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config/supabase_config.dart';
 import 'profile.dart';
+import '../sync/sync_service.dart';
 import 'user_directory.dart';
 
 /// Error que se le puede mostrar tal cual al usuario.
@@ -129,6 +130,7 @@ class AuthService {
     await prefs.remove(_profileKey);
     await prefs.remove(_rememberKey);
     await UserDirectory.instance.clear();
+    await SyncService.instance.reset();
   }
 
   Future<Profile?> _fetchProfile() async {

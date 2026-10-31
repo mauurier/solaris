@@ -1,17 +1,17 @@
-import 'template.dart';
+import 'package:proyecto_app/data/survey/template.dart';
 
-/// Plantilla inicial "Levantamiento eléctrico FV".
+/// Plantilla "Levantamiento eléctrico FV" para las pruebas. Es la misma que
+/// siembra la migración 20261031022418 en Supabase, de donde la baja la app.
 ///
 /// El orden de secciones sigue el recorrido de los levantamientos técnicos de
 /// SolarGrade (REY01202, REY00607); cada evidencia indica la carpeta y el
 /// prefijo que marca "Instrucciones de llenado de carpetas".
-TemplateDef defaultElectricTemplate() {
+TemplateDef electricTemplate() {
   const yes = 'Sí';
   const no = 'No';
   const sfvYes = ShowIf(questionId: 'existe', equals: yes);
 
   return TemplateDef(
-    // Fijo para que todos los teléfonos suban la misma plantilla (tabla `plantilla`).
     id: '015c2871-6002-4d95-94ca-8e95d12e8b35',
     name: 'Levantamiento eléctrico FV',
     type: 'Viabilidad fotovoltaica',

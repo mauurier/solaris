@@ -8,6 +8,7 @@ import '../../core/widgets/brand.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/auth/auth_service.dart';
 import '../../data/auth/user_directory.dart';
+import '../../data/sync/sync_service.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
 import '../shell/home_shell.dart';
@@ -63,6 +64,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       final profile = await AuthService.instance.signIn(email, password, remember: _remember);
       AppState.instance.signIn(profile);
       unawaited(UserDirectory.instance.start());
+      unawaited(SyncService.instance.sync());
       if (!mounted) return;
       Navigator.of(context).pushReplacement(appRoute(const HomeShell()));
     } on AuthFailure catch (e) {

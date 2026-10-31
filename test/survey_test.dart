@@ -13,7 +13,6 @@ import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/storage/file_store.dart';
 import 'package:proyecto_app/data/storage/persistence.dart';
 import 'package:proyecto_app/data/storage/sqlite_persistence.dart';
-import 'package:proyecto_app/data/survey/default_template.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/data/survey/template.dart';
 import 'package:proyecto_app/data/survey/visit_engine.dart';
@@ -21,6 +20,7 @@ import 'package:proyecto_app/data/survey_store.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'fixtures/electric_template.dart';
 import 'test_helpers.dart';
 
 /// Genera un JPEG de prueba con un color uniforme.
@@ -34,13 +34,13 @@ void main() {
 
   group('Plantilla', () {
     test('sobrevive a un viaje por JSON sin perder nada', () {
-      final t = defaultElectricTemplate();
+      final t = electricTemplate();
       final again = TemplateDef.fromJson(jsonDecode(jsonEncode(t.toJson())) as Map<String, Object?>);
       expect(jsonEncode(again.toJson()), jsonEncode(t.toJson()));
     });
 
     test('la plantilla eléctrica es coherente', () {
-      final t = defaultElectricTemplate();
+      final t = electricTemplate();
       expect(t.sections.map((s) => s.title), [
         'Información principal',
         'Subestación',
@@ -69,7 +69,7 @@ void main() {
     });
 
     test('nombra instancias como en las instrucciones', () {
-      final t = defaultElectricTemplate();
+      final t = electricTemplate();
       final tableros = t.sections[1].groups[1];
       final trafos = t.sections[1].groups[0];
       expect([0, 1, 2].map(tableros.instanceName), ['Tablero Principal', 'Tablero 01', 'Tablero 02']);
@@ -82,7 +82,7 @@ void main() {
     VisitEngine engine({Map<String, String> answers = const {}, Map<String, int> instances = const {},
             List<Evidence> evidences = const [], Set<String> docs = const {}, Map<String, String> just = const {}}) =>
         VisitEngine(
-          template: defaultElectricTemplate(),
+          template: electricTemplate(),
           instances: instances,
           answers: answers,
           evidences: evidences,
@@ -426,6 +426,8 @@ void main() {
       final db1 = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
       SurveyStore.reset();
       final store1 = await SurveyStore.init(db1, FileStore(dir));
+      expect(store1.templates, isEmpty, reason: 'la app no trae plantillas: bajan del servidor');
+      await seedTemplate(store1);
       final proj = await seedProject(store1, start: true);
       final v = store1.latestVisit(proj.id)!;
       await store1.setAnswer(v, const AnswerKey('g_datos', 0, 'nave'), 'DSV');
@@ -439,7 +441,7 @@ void main() {
       expect(v2.started, isTrue);
       expect(v2.template, isNotNull, reason: 'la copia de la plantilla se guarda con la visita');
       expect(store2.answersOf(v2.id)['g_datos#0/nave'], 'DSV');
-      expect(store2.templates, hasLength(1), reason: 'la plantilla inicial no se duplica');
+      expect(store2.templates, hasLength(1), reason: 'la plantilla bajada se queda en el teléfono');
 
       await db2.removeByParent(Tables.answers, v2.id);
       expect(await db2.load(Tables.answers), isEmpty);
@@ -480,6 +482,37 @@ void main() {
       await again.close();
     });
 
+    test('la copia local de la plantilla inicial se borra para que baje la del servidor', () async {
+      final dir = Directory.systemTemp.createTempSync('solaris_v5_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = p.join(dir.path, 'solaris.db');
+
+      // Base v4: la app sembraba la plantilla inicial como pendiente de subir.
+      final old = await databaseFactoryFfi.openDatabase(path,
+          options: OpenDatabaseOptions(
+            version: 4,
+            onCreate: (db, _) async {
+              for (final t in [Tables.templates, Tables.projects]) {
+                await db.execute('CREATE TABLE $t (id TEXT PRIMARY KEY, parent TEXT, data TEXT NOT NULL, '
+                    'updated_at TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 1, '
+                    'deleted INTEGER NOT NULL DEFAULT 0)');
+              }
+              final t = electricTemplate();
+              final now = DateTime(2026).toIso8601String();
+              await db.insert(Tables.templates, {'id': t.id, 'data': jsonEncode(t.toJson()), 'updated_at': now});
+              await db.insert(Tables.templates, {'id': 'otra', 'data': '{"id":"otra"}', 'updated_at': now});
+              await db.insert(Tables.projects, {'id': 'p1', 'data': '{"id":"p1"}', 'updated_at': now});
+            },
+          ));
+      await old.close();
+
+      final db = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
+      expect(db.wiped, isFalse);
+      expect((await db.load(Tables.templates)).map((r) => r['id']), ['otra']);
+      expect(await db.load(Tables.projects), hasLength(1), reason: 'lo demás no se toca');
+      await db.close();
+    });
+
     test('lo que cambia queda pendiente de subir y lo borrado no se pierde', () async {
       final dir = Directory.systemTemp.createTempSync('solaris_pend_');
       addTearDown(() => dir.deleteSync(recursive: true));
@@ -490,7 +523,8 @@ void main() {
         await d.put(Tables.visits, 'v2', {'id': 'v2'}, parent: 'p1', pending: false);
         expect((await d.pending(Tables.visits)).map((r) => r.id), ['v1'], reason: 'lo del servidor no se resube');
 
-        await d.markSynced(Tables.visits, 'v1');
+        final v1 = (await d.pending(Tables.visits)).single;
+        await d.markSynced(Tables.visits, 'v1', editedAt: v1.editedAt, base: v1.data);
         expect(await d.pending(Tables.visits), isEmpty);
 
         await d.removeByParent(Tables.visits, 'p1');
@@ -499,6 +533,64 @@ void main() {
         expect(gone.map((r) => r.id).toSet(), {'v1', 'v2'}, reason: 'falta borrarlas en el servidor');
         expect(gone.every((r) => r.deleted && r.parent == 'p1'), isTrue);
       }
+      await db.close();
+    });
+
+    test('la base queda al bajar, se conserva al editar y lo que cambia mientras sube sigue pendiente', () async {
+      final dir = Directory.systemTemp.createTempSync('solaris_base_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final db = await SqlitePersistence.open(p.join(dir.path, 'solaris.db'), factory: databaseFactoryFfi);
+      for (final memory in [false, true]) {
+        final Persistence d = memory ? MemoryPersistence() : db;
+        await d.put(Tables.projects, 'p1', {'name': 'servidor'}, pending: false);
+        await d.put(Tables.projects, 'p1', {'name': 'local'});
+        final row = (await d.pending(Tables.projects)).single;
+        expect(row.base, {'name': 'servidor'}, reason: 'editar no cambia la base');
+
+        // Se edita otra vez mientras se sube la primera versión.
+        await d.put(Tables.projects, 'p1', {'name': 'otra vez'});
+        await d.markSynced(Tables.projects, 'p1', editedAt: row.editedAt, base: row.data);
+        final again = (await d.pending(Tables.projects)).single;
+        expect(again.data, {'name': 'otra vez'}, reason: 'el cambio nuevo falta subirlo');
+        expect(again.base, {'name': 'local'}, reason: 'arriba ya está lo que se subió');
+
+        await d.markSynced(Tables.projects, 'p1', editedAt: again.editedAt, base: again.data);
+        expect(await d.pending(Tables.projects), isEmpty);
+
+        await d.remove(Tables.projects, 'p1');
+        final gone = (await d.pending(Tables.projects)).single;
+        await d.markSynced(Tables.projects, 'p1', editedAt: gone.editedAt);
+        expect(await d.pending(Tables.projects), isEmpty, reason: 'borrada arriba: ya no hace falta');
+        await d.put(Tables.projects, 'p1', {'name': 'nuevo'});
+        expect((await d.pending(Tables.projects)).single.base, isNull);
+      }
+      await db.close();
+    });
+
+    test('una base v5 gana la columna base sin perder datos', () async {
+      final dir = Directory.systemTemp.createTempSync('solaris_v6_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = p.join(dir.path, 'solaris.db');
+      final old = await databaseFactoryFfi.openDatabase(path,
+          options: OpenDatabaseOptions(
+            version: 5,
+            onCreate: (db, _) async {
+              for (final t in Tables.all) {
+                await db.execute('CREATE TABLE $t (id TEXT PRIMARY KEY, parent TEXT, data TEXT NOT NULL, '
+                    'updated_at TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 1, '
+                    'deleted INTEGER NOT NULL DEFAULT 0)');
+              }
+              await db.insert(Tables.projects, {'id': 'p1', 'data': '{"id":"p1"}', 'updated_at': '2026-10-30T10:00:00'});
+            },
+          ));
+      await old.close();
+
+      final db = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
+      final row = (await db.pending(Tables.projects)).single;
+      expect(row.data, {'id': 'p1'});
+      expect(row.base, isNull, reason: 'nunca coincidió con el servidor');
+      await db.put(Tables.projects, 'p1', {'id': 'p1'}, pending: false);
+      expect(await db.pending(Tables.projects), isEmpty);
       await db.close();
     });
 

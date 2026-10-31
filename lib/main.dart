@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
 import 'data/auth/auth_service.dart';
 import 'data/auth/user_directory.dart';
+import 'data/sync/sync_service.dart';
 import 'data/mock_data.dart';
 import 'data/survey_store.dart';
 import 'features/auth/login_screen.dart';
@@ -83,12 +84,14 @@ class _StartupState extends State<_Startup> {
   /// si hay una sesión guardada válida, o el login.
   Future<Widget> _open() async {
     if (!SurveyStore.isReady) await SurveyStore.initDefault();
+    await AppState.instance.loadSettings();
     await AuthService.init();
     try {
       final profile = await AuthService.instance.restore();
       if (profile == null) return const LoginScreen();
       AppState.instance.signIn(profile);
       unawaited(UserDirectory.instance.start());
+      unawaited(SyncService.instance.sync());
       return const HomeShell();
     } on AuthFailure catch (e) {
       return LoginScreen(message: e.message);

@@ -171,9 +171,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _switchRow(
                     Icons.wifi_rounded,
                     'Sincronizar sólo con Wi-Fi',
-                    'Evita consumo de datos con videos',
+                    'Fotos, videos y documentos esperan al Wi-Fi',
                     _state.syncOnWifiOnly,
-                    (v) => setState(() => _state.syncOnWifiOnly = v),
+                    (v) => setState(() => _state.setSyncOnWifiOnly(v)),
                   ),
                 ],
               ),

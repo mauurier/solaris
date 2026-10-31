@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../core/theme/app_colors.dart';
 import 'auth/profile.dart';
 import 'models.dart';
@@ -18,7 +20,10 @@ class AppState extends ChangeNotifier {
   /// Perfil de Supabase; nulo en el modo demo (sin cuenta).
   Profile? profile;
   bool offlineMode = false;
+
+  /// Fotos, videos y documentos sólo se suben y bajan con Wi-Fi.
   bool syncOnWifiOnly = true;
+  static const _wifiOnlyKey = 'ajustes.solo_wifi';
   bool autoSync = true;
   bool commentPerPhoto = false;
   bool gpsStamp = true;
@@ -52,6 +57,18 @@ class AppState extends ChangeNotifier {
         userInitials = 'JP';
     }
     notifyListeners();
+  }
+
+  /// Lee los ajustes guardados en el teléfono.
+  Future<void> loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    syncOnWifiOnly = prefs.getBool(_wifiOnlyKey) ?? true;
+  }
+
+  Future<void> setSyncOnWifiOnly(bool v) async {
+    syncOnWifiOnly = v;
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setBool(_wifiOnlyKey, v);
   }
 
   void toggleOffline() {

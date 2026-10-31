@@ -11,7 +11,6 @@ import 'models.dart';
 import 'storage/file_store.dart';
 import 'storage/persistence.dart';
 import 'storage/sqlite_persistence.dart';
-import 'survey/default_template.dart';
 import 'survey/entities.dart';
 import 'survey/template.dart';
 import 'survey/visit_engine.dart';
@@ -119,11 +118,6 @@ class SurveyStore extends ChangeNotifier {
     evidences.addAll((await db.load(Tables.evidences)).map(Evidence.fromJson));
     for (final row in await db.load(Tables.answers)) {
       _answers.putIfAbsent(row['visitId'] as String, () => {})[row['key'] as String] = row['value'] as String;
-    }
-    if (templates.isEmpty) {
-      final t = defaultElectricTemplate();
-      templates.add(t);
-      await db.put(Tables.templates, t.id, t.toJson());
     }
     for (final e in _catalogs.entries) {
       await e.value.load(catalogDefaults[e.key]!);
@@ -492,7 +486,8 @@ class SurveyStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Cierra la visita. Queda pendiente de sincronizar hasta que exista backend.
+  /// Cierra la visita. Queda "Pend. sincronizar" hasta que suban sus archivos
+  /// (fase 4 de la sincronización); luego pasa a revisión.
   Future<void> finishVisit(FieldVisit v, GeoPoint? point, {String notes = ''}) async {
     v.endedAt = DateTime.now();
     v.endPoint = point;
@@ -502,6 +497,23 @@ class SurveyStore extends ChangeNotifier {
     if (proj != null) proj.status = ProjectStatus.pendienteSync;
     await _saveVisit(v);
     notifyListeners();
+  }
+
+  /// La visita terminada ya subió sus respuestas y archivos: pasa a revisión
+  /// del supervisor. El proyecto también, cuando ninguna de sus visitas
+  /// espera subir. Falso si la visita no estaba esperando.
+  Future<bool> sendToReview(FieldVisit v) async {
+    if (!v.finished || v.status != ProjectStatus.pendienteSync) return false;
+    v.status = ProjectStatus.enRevision;
+    final proj = project(v.projectId);
+    if (proj != null &&
+        proj.status == ProjectStatus.pendienteSync &&
+        visitsOf(proj.id).every((x) => x.status != ProjectStatus.pendienteSync)) {
+      proj.status = ProjectStatus.enRevision;
+    }
+    await _saveVisit(v);
+    notifyListeners();
+    return true;
   }
 
   /// El supervisor puede reabrir una visita cerrada para corregirla.
@@ -669,6 +681,190 @@ class SurveyStore extends ChangeNotifier {
     evidences.remove(e);
     await db.remove(Tables.evidences, e.id);
     await files.delete(e.path);
+  }
+
+  // ----------------------------------------------------------- sincronización
+
+  /// Ids con cambios en el teléfono que falta subir.
+  Future<Set<String>> pendingIds(String table) async => {for (final r in await db.pending(table)) r.id};
+
+  /// El proyecto o algo suyo (visitas, respuestas, evidencias, documentos)
+  /// tiene cambios sin subir; no se puede quitar del teléfono.
+  Future<bool> hasPendingWork(String projectId) async {
+    final visitIds = {for (final v in visitsOf(projectId)) v.id};
+    if ((await pendingIds(Tables.projects)).contains(projectId)) return true;
+    for (final (table, parents) in [
+      (Tables.visits, {projectId}),
+      (Tables.documents, {projectId}),
+      (Tables.answers, visitIds),
+      (Tables.evidences, visitIds),
+    ]) {
+      if ((await db.pending(table)).any((r) => parents.contains(r.parent))) return true;
+    }
+    return false;
+  }
+
+  /// Aplica lo que llegó del servidor, ya en formato local (ver `RemoteRows`).
+  /// [removed] son ids borrados en el servidor o que el usuario ya no puede
+  /// ver. Lo que tiene cambios sin subir no se toca: decide la subida.
+  /// Los objetos que ya existen se actualizan en su lugar, así las pantallas
+  /// abiertas ven el cambio.
+  Future<void> mergeRemote(String table,
+      {List<Map<String, Object?>> rows = const [], Iterable<String> removed = const []}) async {
+    final pending = await pendingIds(table);
+    String rowId(Map<String, Object?> r) => table == Tables.answers ? '${r['visitId']}|${r['key']}' : r['id'] as String;
+    final fresh = rows.where((r) => !pending.contains(rowId(r))).toList();
+    final gone = removed.where((id) => !pending.contains(id)).toList();
+
+    switch (table) {
+      case Tables.projectTypes:
+        await _catalogs[CatalogKind.projectTypes]!.merge(fresh, gone);
+      case Tables.visitMotives:
+        await _catalogs[CatalogKind.visitMotives]!.merge(fresh, gone);
+      case Tables.templates:
+        for (final r in fresh) {
+          _replace(templates, TemplateDef.fromJson(r), (t) => t.id);
+          await db.put(table, r['id'] as String, r, pending: false);
+        }
+        for (final id in gone) {
+          templates.removeWhere((t) => t.id == id);
+          await db.forget(table, id);
+        }
+      case Tables.clients:
+        for (final r in fresh) {
+          _replace(clients, SurveyClient.fromJson(r), (c) => c.id);
+          await db.put(table, r['id'] as String, r, pending: false);
+        }
+        for (final id in gone) {
+          clients.removeWhere((c) => c.id == id);
+          await db.forget(table, id);
+        }
+        clients.sort(_byName);
+      case Tables.sites:
+        for (final r in fresh) {
+          final s = SurveySite.fromJson(r);
+          _replace(sites, s, (x) => x.id);
+          await db.put(table, s.id, r, parent: s.clientId, pending: false);
+        }
+        for (final id in gone) {
+          sites.removeWhere((s) => s.id == id);
+          await db.forget(table, id);
+        }
+      case Tables.projects:
+        for (final r in fresh) {
+          final p = SurveyProject.fromJson(r);
+          final old = project(p.id);
+          old == null ? projects.add(p) : old.assign(p);
+          await db.put(table, p.id, r, pending: false);
+        }
+        for (final id in gone) {
+          if (!await hasPendingWork(id)) await _forgetProject(id);
+        }
+        projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      case Tables.visits:
+        final pendingChildren = {
+          for (final t in [Tables.answers, Tables.evidences]) ...(await db.pending(t)).map((r) => r.parent),
+        };
+        for (final r in fresh) {
+          final v = FieldVisit.fromJson(r);
+          final old = visit(v.id);
+          old == null ? visits.add(v) : old.assign(v);
+          await db.put(table, v.id, r, parent: v.projectId, pending: false);
+        }
+        for (final id in gone.where((id) => !pendingChildren.contains(id))) {
+          await _forgetVisit(id);
+        }
+      case Tables.answers:
+        for (final r in fresh) {
+          final visitId = r['visitId'] as String, key = r['key'] as String, value = r['value'] as String? ?? '';
+          if (value.isEmpty) {
+            _answers[visitId]?.remove(key);
+            await db.forget(table, rowId(r));
+          } else {
+            _answers.putIfAbsent(visitId, () => {})[key] = value;
+            await db.put(table, rowId(r), r, parent: visitId, pending: false);
+          }
+        }
+        for (final id in gone) {
+          final bar = id.indexOf('|');
+          _answers[id.substring(0, bar)]?.remove(id.substring(bar + 1));
+          await db.forget(table, id);
+        }
+      case Tables.documents:
+        for (final r in fresh) {
+          final d = ProjectDocument.fromJson(r);
+          final old = documents.where((x) => x.id == d.id).firstOrNull;
+          if (old != null && old.path != d.path) await files.delete(old.path);
+          _replace(documents, d, (x) => x.id);
+          await db.put(table, d.id, r, parent: d.projectId, pending: false);
+        }
+        for (final id in gone) {
+          for (final d in documents.where((x) => x.id == id).toList()) {
+            documents.remove(d);
+            await files.delete(d.path);
+          }
+          await db.forget(table, id);
+        }
+      case Tables.evidences:
+        for (final r in fresh) {
+          final e = Evidence.fromJson(r);
+          final old = evidences.where((x) => x.id == e.id).firstOrNull;
+          if (old != null && old.path != e.path) await files.delete(old.path);
+          _replace(evidences, e, (x) => x.id);
+          await db.put(table, e.id, r, parent: e.visitId, pending: false);
+        }
+        for (final id in gone) {
+          for (final e in evidences.where((x) => x.id == id).toList()) {
+            evidences.remove(e);
+            await files.delete(e.path);
+          }
+          await db.forget(table, id);
+        }
+      default:
+        throw ArgumentError('Tabla sin sincronización: $table');
+    }
+    notifyListeners();
+  }
+
+  /// Documentos y evidencias cuyo archivo no está en el teléfono (llegó la
+  /// fila del servidor y falta bajarlo), como (tabla local, datos).
+  List<(String, Map<String, Object?>)> get missingFiles => [
+        for (final d in documents)
+          if (!files.exists(d.path)) (Tables.documents, d.toJson()),
+        for (final e in evidences)
+          if (!files.exists(e.path)) (Tables.evidences, e.toJson()),
+      ];
+
+  /// Se bajaron archivos: las miniaturas ya se pueden dibujar.
+  void filesArrived() => notifyListeners();
+
+  static void _replace<T>(List<T> list, T item, String Function(T) id) {
+    final i = list.indexWhere((x) => id(x) == id(item));
+    i < 0 ? list.add(item) : list[i] = item;
+  }
+
+  Future<void> _forgetVisit(String id) async {
+    await db.forgetByParent(Tables.answers, id);
+    await db.forgetByParent(Tables.evidences, id);
+    await db.forget(Tables.visits, id);
+    _answers.remove(id);
+    for (final e in evidences.where((e) => e.visitId == id).toList()) {
+      evidences.remove(e);
+      await files.delete(e.path);
+    }
+    visits.removeWhere((v) => v.id == id);
+  }
+
+  Future<void> _forgetProject(String id) async {
+    for (final v in visitsOf(id)) {
+      await _forgetVisit(v.id);
+    }
+    await db.forgetByParent(Tables.visits, id);
+    await db.forgetByParent(Tables.documents, id);
+    await db.forget(Tables.projects, id);
+    documents.removeWhere((d) => d.projectId == id);
+    projects.removeWhere((p) => p.id == id);
+    await files.deleteDir(p.join('media', id));
   }
 
   // ------------------------------------------------------------------- cálculo

@@ -149,6 +149,23 @@ class SurveyProject {
   List<String> get technicians => List.unmodifiable([for (final id in technicianIds) _userName(id)]);
   String get type => _store?.catalogName(CatalogKind.projectTypes, typeId) ?? '';
 
+  /// Copia los datos de [o] (la versión del servidor) sin cambiar de objeto,
+  /// para que las pantallas abiertas vean el cambio.
+  void assign(SurveyProject o) {
+    code = o.code;
+    name = o.name;
+    siteId = o.siteId;
+    supervisorId = o.supervisorId;
+    technicianIds = o.technicianIds;
+    templateId = o.templateId;
+    typeId = o.typeId;
+    description = o.description;
+    createdAt = o.createdAt;
+    scheduledAt = o.scheduledAt;
+    status = o.status;
+    updatedAt = o.updatedAt;
+  }
+
   Map<String, Object?> toJson() => {
         'id': id,
         'code': code,
@@ -267,7 +284,7 @@ class FieldVisit {
 
   /// Nulo en el levantamiento inicial (primera visita del proyecto).
   String? motiveId;
-  final String templateId;
+  String templateId;
   DateTime? scheduledAt;
   ProjectStatus status;
   DateTime? startedAt;
@@ -301,6 +318,25 @@ class FieldVisit {
   bool get finished => endedAt != null;
 
   int instanceCount(GroupDef g) => g.repeatable ? (instances[g.id] ?? 1) : 1;
+
+  /// Copia los datos de [o] (la versión del servidor) sin cambiar de objeto.
+  void assign(FieldVisit o) {
+    technicianId = o.technicianId;
+    supervisorId = o.supervisorId;
+    motiveId = o.motiveId;
+    templateId = o.templateId;
+    scheduledAt = o.scheduledAt;
+    status = o.status;
+    startedAt = o.startedAt;
+    endedAt = o.endedAt;
+    startPoint = o.startPoint;
+    endPoint = o.endPoint;
+    openedAt = o.openedAt;
+    template = o.template;
+    instances = o.instances;
+    justifications = o.justifications;
+    notes = o.notes;
+  }
 
   Map<String, Object?> toJson() => {
         'id': id,

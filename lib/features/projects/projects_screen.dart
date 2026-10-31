@@ -4,6 +4,8 @@ import '../../core/services/formatting.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
+import '../../data/auth/user_directory.dart';
+import '../../data/sync/sync_service.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
 import '../../data/survey/entities.dart';
@@ -110,46 +112,61 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               ),
               const SizedBox(height: 14),
               Expanded(
-                child: list.isEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 30),
-                        child: EmptyState(
-                          icon: Icons.folder_off_rounded,
-                          title: all.isEmpty ? 'Aún no hay proyectos' : 'Sin coincidencias',
-                          message: all.isEmpty
-                              ? (canCreate
-                                  ? 'Crea el primero con el botón +. Podrás subir el recibo CFE, el unifilar y planos.'
-                                  : 'Cuando un supervisor te asigne un proyecto aparecerá aquí.')
-                              : 'Ningún proyecto coincide con la búsqueda o el filtro.',
-                          action: all.isEmpty && canCreate
-                              ? AppButton('Nuevo proyecto',
-                                  icon: Icons.add_rounded,
-                                  onPressed: () => push(context, const NewProjectScreen(), fullscreenDialog: true))
-                              : null,
-                        ),
-                      )
-                    : ListView(
-                        padding: EdgeInsets.fromLTRB(20, 0, 20, canCreate ? 180 : 110),
-                        children: [
-                          for (final client in _clientsOf(list)) ...[
-                            _ClientHeader(
-                              client: client,
-                              projects: list.where((p) => p.client == client).toList(),
-                              technician: technician,
-                            ),
-                            for (final p in list.where((p) => p.client == client)) ...[
-                              ProjectRowCard(
-                                project: p,
-                                expanded: true,
-                                status: isSupervisor ? (followUpStateOf(p).label, followUpStateOf(p).color) : null,
-                                onTap: () => showProjectVisitsSheet(context, p, technician: technician),
+                child: _refreshable(
+                  list.isEmpty
+                      ? LayoutBuilder(
+                          // Desplazable para poder deslizar y bajar cambios aunque no haya proyectos.
+                          builder: (context, box) => ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              SizedBox(
+                                height: box.maxHeight,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                                  child: EmptyState(
+                                    icon: Icons.folder_off_rounded,
+                                    title: all.isEmpty ? 'Aún no hay proyectos' : 'Sin coincidencias',
+                                    message: all.isEmpty
+                                        ? (canCreate
+                                            ? 'Crea el primero con el botón +. Podrás subir el recibo CFE, el unifilar y planos.'
+                                            : 'Cuando un supervisor te asigne un proyecto aparecerá aquí.')
+                                        : 'Ningún proyecto coincide con la búsqueda o el filtro.',
+                                    action: all.isEmpty && canCreate
+                                        ? AppButton('Nuevo proyecto',
+                                            icon: Icons.add_rounded,
+                                            onPressed: () =>
+                                                push(context, const NewProjectScreen(), fullscreenDialog: true))
+                                        : null,
+                                  ),
+                                ),
                               ),
-                              const SizedBox(height: 11),
                             ],
-                            const SizedBox(height: 10),
+                          ),
+                        )
+                      : ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: EdgeInsets.fromLTRB(20, 0, 20, canCreate ? 180 : 110),
+                          children: [
+                            for (final client in _clientsOf(list)) ...[
+                              _ClientHeader(
+                                client: client,
+                                projects: list.where((p) => p.client == client).toList(),
+                                technician: technician,
+                              ),
+                              for (final p in list.where((p) => p.client == client)) ...[
+                                ProjectRowCard(
+                                  project: p,
+                                  expanded: true,
+                                  status: isSupervisor ? (followUpStateOf(p).label, followUpStateOf(p).color) : null,
+                                  onTap: () => showProjectVisitsSheet(context, p, technician: technician),
+                                ),
+                                const SizedBox(height: 11),
+                              ],
+                              const SizedBox(height: 10),
+                            ],
                           ],
-                        ],
-                      ),
+                        ),
+                ),
               ),
             ],
           ),
@@ -166,6 +183,20 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         );
       },
     );
+  }
+
+  /// Con sesión, deslizar hacia abajo sube lo del teléfono y baja lo del servidor.
+  Widget _refreshable(Widget child) {
+    if (AppState.instance.profile == null) return child;
+    return RefreshIndicator(onRefresh: _sync, child: child);
+  }
+
+  Future<void> _sync() async {
+    await Future.wait([UserDirectory.instance.refresh(), SyncService.instance.sync()]);
+    final error = SyncService.instance.error;
+    if (error != null && mounted) {
+      showAppSnack(context, error, icon: Icons.cloud_off_rounded, color: AppColors.warning);
+    }
   }
 
   /// Clientes en orden alfabético.

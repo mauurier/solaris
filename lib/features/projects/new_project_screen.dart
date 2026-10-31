@@ -49,7 +49,15 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
   DateTime? _date;
   bool _locating = false;
 
-  late String _supervisor = UserDirectory.instance.assignable(UserRole.supervisor).firstOrNull?.id ?? '';
+  late String _supervisor = _supervisors.firstOrNull?.id ?? '';
+
+  /// Un supervisor sólo puede crear proyectos que él mismo supervisa (así lo
+  /// exige Solaris al subirlos).
+  List<AppUser> get _supervisors {
+    final all = UserDirectory.instance.assignable(UserRole.supervisor);
+    final app = AppState.instance;
+    return app.role == UserRole.supervisor ? all.where((u) => u.id == app.userId).toList() : all;
+  }
   final _techs = <String>{};
   late TemplateDef? _template = _store.activeTemplates.firstOrNull;
   final _docs = <PickedDocument>[];
@@ -337,7 +345,7 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
       ]);
 
   Widget _team() {
-    final supervisors = UserDirectory.instance.assignable(UserRole.supervisor);
+    final supervisors = _supervisors;
     final techs = UserDirectory.instance.assignable(UserRole.tecnico);
     return _wrap('team', [
       const FieldLabel('Supervisor', required: true),
@@ -386,6 +394,15 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
 
   Widget _templateAndDocs() => _wrap('tpl', [
         const FieldLabel('Plantilla de levantamiento', required: true),
+        if (_store.activeTemplates.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 10),
+            child: Text(
+              'Todavía no hay plantillas en el teléfono. Bajan del servidor al iniciar sesión o al deslizar '
+              'hacia abajo en Proyectos.',
+              style: T.small,
+            ),
+          ),
         for (final t in _store.activeTemplates)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),

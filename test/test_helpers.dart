@@ -9,7 +9,10 @@ import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/storage/file_store.dart';
 import 'package:proyecto_app/data/storage/persistence.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
+import 'package:proyecto_app/data/survey/template.dart';
 import 'package:proyecto_app/data/survey_store.dart';
+
+import 'fixtures/electric_template.dart';
 
 /// Carga la tipografía real del sistema para que las medidas de texto
 /// correspondan con las del dispositivo. El font de pruebas de Flutter dibuja
@@ -51,14 +54,24 @@ void expectNoRenderErrors(WidgetTester tester) {
 }
 
 /// Store en memoria con archivos en una carpeta temporal: las pruebas no
-/// tocan SQLite ni la carpeta real de la app.
-Future<SurveyStore> initTestStore() async {
+/// tocan SQLite ni la carpeta real de la app. Con [withTemplate] trae la
+/// plantilla eléctrica como si ya hubiera bajado del servidor.
+Future<SurveyStore> initTestStore({bool withTemplate = true}) async {
   SurveyStore.reset();
   final dir = Directory.systemTemp.createTempSync('solaris_test_');
   addTearDown(() {
     if (dir.existsSync()) dir.deleteSync(recursive: true);
   });
-  return SurveyStore.init(MemoryPersistence(), FileStore(dir));
+  final store = await SurveyStore.init(MemoryPersistence(), FileStore(dir));
+  if (withTemplate) await seedTemplate(store);
+  return store;
+}
+
+/// Guarda la plantilla eléctrica como la deja la bajada (sin pendiente de subir).
+Future<TemplateDef> seedTemplate(SurveyStore store) async {
+  final t = electricTemplate();
+  await store.mergeRemote(Tables.templates, rows: [t.toJson()]);
+  return store.template(t.id)!;
 }
 
 /// Id de `perfil` del usuario de ejemplo con ese nombre (modo demo).
