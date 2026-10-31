@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/catalog.dart';
+import '../../data/auth/user_directory.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
 import '../../data/survey/entities.dart';
@@ -25,10 +26,12 @@ class NewVisitScreen extends StatefulWidget {
 }
 
 class _NewVisitScreenState extends State<NewVisitScreen> {
-  late String _tech = widget.project.technicians.firstOrNull ??
-      Mock.users.firstWhere((u) => u.role == UserRole.tecnico).name;
+  /// Ids de técnico y motivo.
+  late String _tech = widget.project.technicianIds.firstOrNull ??
+      UserDirectory.instance.assignable(UserRole.tecnico).firstOrNull?.id ??
+      '';
   final _store = SurveyStore.instance;
-  late String _motive = _store.catalog(CatalogKind.visitMotives).firstOrNull?.name ?? '';
+  late String _motive = _store.catalog(CatalogKind.visitMotives).firstOrNull?.id ?? '';
 
   /// La del proyecto si sigue activa; si no, la primera activa.
   late TemplateDef? _template = _store.activeTemplates.where((t) => t.id == widget.project.templateId).firstOrNull ??
@@ -38,26 +41,32 @@ class _NewVisitScreenState extends State<NewVisitScreen> {
 
   Future<void> _addMotive() async {
     final m = await showCatalogItemSheet(context, CatalogKind.visitMotives);
-    if (m != null && mounted) setState(() => _motive = m.name);
+    if (m != null && mounted) setState(() => _motive = m.id);
   }
 
   Future<void> _save() async {
-    if (_motive.isEmpty || _template == null) {
-      showAppSnack(context, _motive.isEmpty ? 'Elige el motivo de la visita' : 'Elige una plantilla',
+    if (_motive.isEmpty || _template == null || _tech.isEmpty) {
+      showAppSnack(
+          context,
+          _motive.isEmpty
+              ? 'Elige el motivo de la visita'
+              : _template == null
+                  ? 'Elige una plantilla'
+                  : 'Elige el técnico',
           icon: Icons.error_outline_rounded, color: AppColors.danger);
       return;
     }
     setState(() => _saving = true);
     await _store.createVisit(widget.project,
-        technician: _tech, motive: _motive, scheduledAt: _date, templateId: _template!.id);
+        technicianId: _tech, motiveId: _motive, scheduledAt: _date, templateId: _template!.id);
     if (!mounted) return;
     Navigator.pop(context);
-    showAppSnack(context, 'Visita creada y asignada a $_tech', icon: Icons.check_circle_rounded, color: AppColors.success);
+    showAppSnack(context, 'Visita creada y asignada a ${UserDirectory.instance.nameOf(_tech)}', icon: Icons.check_circle_rounded, color: AppColors.success);
   }
 
   @override
   Widget build(BuildContext context) {
-    final techs = Mock.users.where((u) => u.role == UserRole.tecnico && u.active).toList();
+    final techs = UserDirectory.instance.assignable(UserRole.tecnico);
     return DetailScaffold(
       title: 'Nueva visita',
       subtitle: widget.project.name,
@@ -72,7 +81,7 @@ class _NewVisitScreenState extends State<NewVisitScreen> {
             runSpacing: 8,
             children: [
               for (final m in _store.catalog(CatalogKind.visitMotives))
-                ChoicePill(label: m.name, selected: _motive == m.name, onTap: () => setState(() => _motive = m.name)),
+                ChoicePill(label: m.name, selected: _motive == m.id, onTap: () => setState(() => _motive = m.id)),
               // El admin puede crear el motivo que falte sin salir de la pantalla.
               if (AppState.instance.role == UserRole.admin)
                 ChoicePill(label: '+ Nuevo motivo', selected: false, onTap: _addMotive),
@@ -118,15 +127,15 @@ class _NewVisitScreenState extends State<NewVisitScreen> {
                 child: GlassCard(
                   color: AppColors.surfaceAlt,
                   padding: const EdgeInsets.all(11),
-                  borderColor: _tech == u.name ? AppColors.accent.withValues(alpha: 0.45) : null,
-                  onTap: () => setState(() => _tech = u.name),
+                  borderColor: _tech == u.id ? AppColors.accent.withValues(alpha: 0.45) : null,
+                  onTap: () => setState(() => _tech = u.id),
                   child: Row(
                     children: [
-                      InitialsAvatar(u.initials, size: 34, color: _tech == u.name ? AppColors.accent : AppColors.blue),
+                      InitialsAvatar(u.initials, size: 34, color: _tech == u.id ? AppColors.accent : AppColors.blue),
                       const SizedBox(width: 12),
                       Expanded(child: Text(u.name, style: T.h3.copyWith(fontSize: 14))),
-                      Icon(_tech == u.name ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                          size: 19, color: _tech == u.name ? AppColors.accent : AppColors.textMuted),
+                      Icon(_tech == u.id ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                          size: 19, color: _tech == u.id ? AppColors.accent : AppColors.textMuted),
                     ],
                   ),
                 ),

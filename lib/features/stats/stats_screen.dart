@@ -3,6 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/charts.dart';
 import '../../core/widgets/ui.dart';
+import '../../data/auth/user_directory.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
 import '../shell/home_shell.dart';
@@ -103,8 +104,8 @@ class _StatsScreenState extends State<StatsScreen> {
   // ------------------------------------------------------------------ técnico
   List<Widget> _byTechnician() => [
         const SectionLabel('Desempeño por técnico'),
-        ...Mock.users.where((u) => u.role == UserRole.tecnico && u.active).map((u) {
-          final idx = Mock.users.indexOf(u);
+        ...UserDirectory.instance.assignable(UserRole.tecnico).indexed.map((e) {
+          final (idx, u) = e;
           return Padding(
             padding: const EdgeInsets.only(bottom: 11),
             child: GlassCard(
@@ -120,7 +121,7 @@ class _StatsScreenState extends State<StatsScreen> {
                           children: [
                             Text(u.name, style: T.h3),
                             const SizedBox(height: 3),
-                            Text('${u.projects} levantamientos realizados', style: T.tiny),
+                            Text('${u.projects ?? 0} levantamientos realizados', style: T.tiny),
                           ],
                         ),
                       ),

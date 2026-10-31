@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
@@ -5,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/auth/auth_service.dart';
+import '../../data/auth/user_directory.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
 import '../shell/home_shell.dart';
@@ -59,6 +62,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     try {
       final profile = await AuthService.instance.signIn(email, password, remember: _remember);
       AppState.instance.signIn(profile);
+      unawaited(UserDirectory.instance.start());
       if (!mounted) return;
       Navigator.of(context).pushReplacement(appRoute(const HomeShell()));
     } on AuthFailure catch (e) {

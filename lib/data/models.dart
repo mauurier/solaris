@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
+import 'auth/profile.dart';
 
 enum UserRole { admin, supervisor, tecnico }
 
@@ -154,20 +155,49 @@ extension FindingStatusX on FindingStatus {
 
 class AppUser {
   AppUser({
+    required this.id,
     required this.name,
     required this.role,
     required this.email,
     required this.initials,
     this.active = true,
-    this.projects = 0,
+    this.projects,
+    this.profile,
   });
 
+  factory AppUser.fromProfile(Profile p) => AppUser(
+        id: p.id,
+        name: p.name,
+        role: p.uiRole,
+        email: p.email,
+        initials: p.initials,
+        active: p.active,
+        profile: p,
+      );
+
+  /// Id de `perfil` (en el modo demo, uno de ejemplo).
+  final String id;
   final String name;
   final UserRole role;
   final String email;
   final String initials;
   bool active;
-  final int projects;
+
+  /// Solo en los datos de ejemplo; aún no se cuentan en la base.
+  final int? projects;
+
+  /// Fila de `perfil`; nula en el modo demo.
+  final Profile? profile;
+
+  bool get isSuperadmin => profile?.isSuperadmin ?? false;
+
+  /// Se le puede asignar trabajo: activa y sin vencer (puede empezar después).
+  bool get assignable {
+    final p = profile;
+    if (p == null) return active;
+    final s = p.statusOn(DateTime.now());
+    return s == AccountStatus.ok || s == AccountStatus.notStarted;
+  }
 }
 
 class Client {

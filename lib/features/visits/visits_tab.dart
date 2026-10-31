@@ -96,7 +96,7 @@ class _VisitsTabState extends State<VisitsTab> {
             : isSupervisor
                 ? _supervisorFilters
                 : _fieldFilters;
-        final all = store.visits.where((v) => !mine || v.technician == state.userName).toList();
+        final all = store.visits.where((v) => !mine || v.technicianId == state.userId).toList();
         final visits = all.where(_matches).toList();
         List<FieldVisit> inState(VisitState s) => visits.where((v) => v.state == s).toList();
         final running = inState(VisitState.enCurso)..sort((a, b) => b.startedAt!.compareTo(a.startedAt!));

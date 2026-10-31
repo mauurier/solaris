@@ -33,7 +33,7 @@ class DashboardScreen extends StatelessWidget {
       listenable: Listenable.merge([state, store]),
       builder: (context, _) {
         final isField = state.role == UserRole.tecnico;
-        final projects = store.projectsFor(state.role, state.userName);
+        final projects = store.projectsFor(state.role, state.userId);
         return SafeArea(
           bottom: false,
           child: ListView(
@@ -46,13 +46,13 @@ class DashboardScreen extends StatelessWidget {
                 actions: const [_OfflineChip()],
               ),
               const SizedBox(height: 6),
-              if (isField) _FieldCard(store: store, user: state.userName) else _PortfolioCard(projects: projects),
+              if (isField) _FieldCard(store: store, user: state.userId) else _PortfolioCard(projects: projects),
               const SizedBox(height: 22),
               _KpiRow(
                 projects: projects,
                 isField: isField,
                 isSupervisor: state.role == UserRole.supervisor,
-                user: state.userName,
+                user: state.userId,
                 interactive: state.role == UserRole.admin,
               ),
               const SizedBox(height: 24),
@@ -97,13 +97,15 @@ class _OfflineChip extends StatelessWidget {
 class _FieldCard extends StatelessWidget {
   const _FieldCard({required this.store, required this.user});
   final SurveyStore store;
+
+  /// Id de `perfil` del técnico.
   final String user;
 
   @override
   Widget build(BuildContext context) {
     final active = store.activeVisitFor(user);
     final next = active ??
-        (store.visits.where((v) => !v.started && v.technician == user).toList()
+        (store.visits.where((v) => !v.started && v.technicianId == user).toList()
               ..sort((a, b) => (a.scheduledAt ?? DateTime(2100)).compareTo(b.scheduledAt ?? DateTime(2100))))
             .firstOrNull;
 
@@ -389,7 +391,7 @@ class _KpiRow extends StatelessWidget {
   /// reciente (la en curso que abrió al último o la última que terminó).
   List<(String, String, String, Color, IconData, VoidCallback)> _fieldKpis(
       SurveyStore store, int projectCount, int docs) {
-    final mine = store.visits.where((v) => v.technician == user).toList();
+    final mine = store.visits.where((v) => v.technicianId == user).toList();
     final running = mine.where((v) => v.started && !v.finished).length;
     final recent = store.recentVisitFor(user);
     final engine = recent == null ? null : store.engineFor(recent);

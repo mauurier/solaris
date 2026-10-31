@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:proyecto_app/core/theme/app_theme.dart';
+import 'package:proyecto_app/data/catalog.dart';
+import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/storage/file_store.dart';
 import 'package:proyecto_app/data/storage/persistence.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
@@ -59,20 +61,38 @@ Future<SurveyStore> initTestStore() async {
   return SurveyStore.init(MemoryPersistence(), FileStore(dir));
 }
 
+/// Id de `perfil` del usuario de ejemplo con ese nombre (modo demo).
+String uid(String name) => Mock.users.firstWhere((u) => u.name == name).id;
+
+/// Id del cliente con esa razón social; lo crea si no existe.
+Future<String> clientId(SurveyStore store, String name) async =>
+    (store.clients.where((c) => c.name == name).firstOrNull ?? await store.addClient(name)).id;
+
+/// Id del motivo de visita con ese nombre.
+String motiveId(SurveyStore store, String name) =>
+    store.catalog(CatalogKind.visitMotives).firstWhere((m) => m.name == name).id;
+
+/// Pasa el proyecto a otro cliente (cada cliente con su propio sitio).
+Future<void> moveToClient(SurveyStore store, SurveyProject p, String client) async {
+  final site = SurveySite(id: '${p.id}-site', clientId: await clientId(store, client), name: p.site);
+  store.sites.add(site);
+  p.siteId = site.id;
+}
+
 /// Proyecto de ejemplo con su primera visita asignada a Juan Pérez.
 Future<SurveyProject> seedProject(SurveyStore store, {bool start = false}) async {
   final p = await store.createProject(
     code: 'REY01202',
     name: 'PROLOGIS Reynosa DSV',
-    client: 'TRUPER',
+    clientId: await clientId(store, 'TRUPER'),
     site: 'Nave DSV',
     address: 'Parque Colonial, Reynosa',
     coords: const GeoPoint(26.073459, -98.381511),
     scheduledAt: DateTime(2026, 9, 25),
-    supervisor: 'Laura Méndez',
-    technicians: ['Juan Pérez'],
+    supervisorId: uid('Laura Méndez'),
+    technicianIds: [uid('Juan Pérez')],
     template: store.templates.first,
-    type: 'Viabilidad FV',
+    typeId: store.catalog(CatalogKind.projectTypes).firstWhere((t) => t.name == 'Viabilidad FV').id,
   );
   if (start) await store.startVisit(store.latestVisit(p.id)!, const GeoPoint(26.07, -98.38));
   return p;

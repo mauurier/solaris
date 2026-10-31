@@ -17,7 +17,7 @@ void main() {
     final first = await seedProject(store, start: true);
     final second = await seedProject(store, start: true);
     second.name = 'Springs Window Fashions';
-    await store.markProjectOpened(first.id, 'Juan Pérez'); // la última abierta va primero
+    await store.markProjectOpened(first.id, uid('Juan Pérez')); // la última abierta va primero
 
     await pumpOnPhone(tester, const HomeShell());
     await tester.tap(navPlus);
@@ -35,7 +35,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('${second.name} · VIS-001 ·'), findsOneWidget, reason: 'pendientes de la elegida');
     expect(find.textContaining('elige en cuál capturar'), findsNothing);
-    expect(store.activeVisitFor('Juan Pérez')!.projectId, second.id, reason: 'queda como su visita en curso');
+    expect(store.activeVisitFor(uid('Juan Pérez'))!.projectId, second.id, reason: 'queda como su visita en curso');
   });
 
   testWidgets('Con una sola visita en curso, el + va directo a lo pendiente', (tester) async {

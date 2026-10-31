@@ -25,9 +25,8 @@ void main() {
     final firstVisit = store.latestVisit(first.id)!;
     await store.finishVisit(firstVisit, const GeoPoint(26, -98));
     final second = await seedProject(store, start: true);
-    second
-      ..client = 'SPRINGS'
-      ..name = 'Springs Window Fashions';
+    await moveToClient(store, second, 'SPRINGS');
+    second.name = 'Springs Window Fashions';
     await store.finishVisit(store.latestVisit(second.id)!, const GeoPoint(26, -98));
     await seedProject(store, start: true); // en curso: no cuenta
 

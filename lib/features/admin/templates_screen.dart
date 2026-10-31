@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/services/formatting.dart';
 import '../../core/theme/app_colors.dart';
@@ -28,7 +29,7 @@ class TemplatesScreen extends StatelessWidget {
           expand: true,
           onPressed: () async {
             final t = TemplateDef(
-              id: 'tpl-${DateTime.now().microsecondsSinceEpoch}',
+              id: const Uuid().v4(),
               name: 'Nueva plantilla',
               type: 'Levantamiento',
               sections: [

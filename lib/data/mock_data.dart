@@ -9,6 +9,9 @@ class AppState extends ChangeNotifier {
   static final AppState instance = AppState._();
 
   UserRole role = UserRole.tecnico;
+
+  /// Id de `perfil` del usuario con sesión (o del usuario de ejemplo).
+  String userId = 'demo-jperez';
   String userName = 'Juan Pérez';
   String userInitials = 'JP';
 
@@ -24,6 +27,7 @@ class AppState extends ChangeNotifier {
   void signIn(Profile p) {
     profile = p;
     role = p.uiRole;
+    userId = p.id;
     userName = p.name;
     userInitials = p.initials;
     notifyListeners();
@@ -35,12 +39,15 @@ class AppState extends ChangeNotifier {
     role = r;
     switch (r) {
       case UserRole.admin:
+        userId = 'demo-maquino';
         userName = 'Mauricio Aquino';
         userInitials = 'MA';
       case UserRole.supervisor:
+        userId = 'demo-lmendez';
         userName = 'Laura Méndez';
         userInitials = 'LM';
       case UserRole.tecnico:
+        userId = 'demo-jperez';
         userName = 'Juan Pérez';
         userInitials = 'JP';
     }
@@ -437,13 +444,13 @@ class Mock {
   ];
 
   static final users = <AppUser>[
-    AppUser(name: 'Mauricio Aquino', role: UserRole.admin, email: 'm.aquino@solaris.mx', initials: 'MA', projects: 42),
-    AppUser(name: 'Laura Méndez', role: UserRole.supervisor, email: 'l.mendez@solaris.mx', initials: 'LM', projects: 18),
-    AppUser(name: 'Juan Pérez', role: UserRole.tecnico, email: 'j.perez@solaris.mx', initials: 'JP', projects: 27),
-    AppUser(name: 'Diego Salas', role: UserRole.tecnico, email: 'd.salas@solaris.mx', initials: 'DS', projects: 21),
-    AppUser(name: 'Ana Torres', role: UserRole.tecnico, email: 'a.torres@solaris.mx', initials: 'AT', projects: 9),
-    AppUser(name: 'Ing. Carlos Ruiz', role: UserRole.supervisor, email: 'c.ruiz@solaris.mx', initials: 'CR', projects: 33),
-    AppUser(name: 'Sofía Herrera', role: UserRole.tecnico, email: 's.herrera@solaris.mx', initials: 'SH', projects: 4, active: false),
+    AppUser(id: 'demo-maquino', name: 'Mauricio Aquino', role: UserRole.admin, email: 'm.aquino@solaris.mx', initials: 'MA', projects: 42),
+    AppUser(id: 'demo-lmendez', name: 'Laura Méndez', role: UserRole.supervisor, email: 'l.mendez@solaris.mx', initials: 'LM', projects: 18),
+    AppUser(id: 'demo-jperez', name: 'Juan Pérez', role: UserRole.tecnico, email: 'j.perez@solaris.mx', initials: 'JP', projects: 27),
+    AppUser(id: 'demo-dsalas', name: 'Diego Salas', role: UserRole.tecnico, email: 'd.salas@solaris.mx', initials: 'DS', projects: 21),
+    AppUser(id: 'demo-atorres', name: 'Ana Torres', role: UserRole.tecnico, email: 'a.torres@solaris.mx', initials: 'AT', projects: 9),
+    AppUser(id: 'demo-cruiz', name: 'Ing. Carlos Ruiz', role: UserRole.supervisor, email: 'c.ruiz@solaris.mx', initials: 'CR', projects: 33),
+    AppUser(id: 'demo-sherrera', name: 'Sofía Herrera', role: UserRole.tecnico, email: 's.herrera@solaris.mx', initials: 'SH', projects: 4, active: false),
   ];
 
   static const clients = <Client>[

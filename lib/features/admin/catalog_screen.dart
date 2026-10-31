@@ -92,7 +92,7 @@ class CatalogScreen extends StatelessWidget {
             separatorBuilder: (_, _) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final item = items[i];
-              final uses = store.catalogUses(kind, item.name);
+              final uses = store.catalogUses(kind, item);
               return GlassCard(
                 onTap: () => showCatalogItemSheet(context, kind, editing: item),
                 child: Row(
@@ -181,7 +181,7 @@ class _CatalogItemFormState extends State<_CatalogItemForm> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.editing;
-    final uses = editing == null ? 0 : _store.catalogUses(kind, editing.name);
+    final uses = editing == null ? 0 : _store.catalogUses(kind, editing);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
       child: Column(

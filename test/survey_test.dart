@@ -130,7 +130,7 @@ void main() {
             kind: EvidenceKind.photo,
             path: 'x.jpg',
             capturedAt: DateTime(2026),
-            user: 'Juan Pérez',
+            userId: 'demo-jperez',
           );
       bool done(VisitEngine e) => e.isAnswered(e.questions().firstWhere((rq) => rq.question.id == 'generales'));
       expect(done(engine(evidences: [ev('a')])), isFalse); // pide 2
@@ -163,8 +163,39 @@ void main() {
       expect(v.technician, 'Juan Pérez');
       expect(v.label, 'VIS-001');
       expect(proj.status, ProjectStatus.asignado);
-      expect(store.projectsFor(UserRole.tecnico, 'Juan Pérez'), [proj]);
-      expect(store.projectsFor(UserRole.tecnico, 'Diego Salas'), isEmpty);
+      expect(store.projectsFor(UserRole.tecnico, uid('Juan Pérez')), [proj]);
+      expect(store.projectsFor(UserRole.tecnico, uid('Diego Salas')), isEmpty);
+    });
+
+    test('proyectos y visitas guardan ids; los nombres salen de usuarios, clientes y catálogos', () async {
+      final store = await initTestStore();
+      final proj = await seedProject(store);
+      final again = await seedProject(store);
+      expect(again.siteId, proj.siteId, reason: 'mismo cliente y nombre de sitio: se reutiliza');
+      expect(store.sites, hasLength(1));
+      expect(proj.toJson().keys, containsAll(['siteId', 'supervisorId', 'technicianIds', 'typeId']));
+      expect(proj.toJson().values, isNot(contains('Laura Méndez')), reason: 'no se guardan nombres');
+      expect(proj.supervisor, 'Laura Méndez');
+      expect(proj.address, 'Parque Colonial, Reynosa');
+
+      expect(store.validateClient('truper'), isNotNull, reason: 'nombre repetido');
+      final c = await store.addClient('SPRINGS', rfc: 'swf010101aa1');
+      expect(c.rfc, 'SWF010101AA1');
+      expect(store.validateClient('Otro', rfc: 'SWF010101AA1'), isNotNull, reason: 'RFC repetido');
+      expect(store.projectsOfClient(proj.clientId!), 2);
+      expect(() => proj.technicians.clear(), throwsUnsupportedError, reason: 'se cambia technicianIds');
+    });
+
+    test('borrar no quita la fila: queda pendiente para borrarla en el servidor', () async {
+      final store = await initTestStore();
+      final proj = await seedProject(store);
+      final v = store.latestVisit(proj.id)!;
+      await store.deleteProject(proj);
+      expect(store.projects, isEmpty);
+      final pending = await store.db.pending(Tables.visits);
+      expect(pending.single.id, v.id);
+      expect(pending.single.deleted, isTrue);
+      expect((await store.db.pending(Tables.projects)).single.deleted, isTrue);
     });
 
     test('la visita conserva su versión de plantilla aunque se edite', () async {
@@ -180,7 +211,7 @@ void main() {
       expect(store.templates.first.version, 'v1.1');
 
       expect(store.templateFor(v1).questionCount, before);
-      final v2 = await store.createVisit(proj, technician: 'Juan Pérez', motive: 'Mediciones adicionales');
+      final v2 = await store.createVisit(proj, technicianId: uid('Juan Pérez'), motiveId: motiveId(store, 'Mediciones adicionales'));
       await store.startVisit(v2, null);
       expect(store.templateFor(v2).questionCount, before + 1);
       expect(v2.label, 'VIS-002');
@@ -238,17 +269,17 @@ void main() {
       final second = await seedProject(store, start: true);
       final v1 = store.latestVisit(first.id)!;
       final v2 = store.latestVisit(second.id)!;
-      expect(store.activeVisitFor('Juan Pérez'), v2, reason: 'sin aperturas manda la última iniciada');
+      expect(store.activeVisitFor(uid('Juan Pérez')), v2, reason: 'sin aperturas manda la última iniciada');
 
-      await store.markProjectOpened(first.id, 'Juan Pérez');
-      expect(store.activeVisitFor('Juan Pérez'), v1);
+      await store.markProjectOpened(first.id, uid('Juan Pérez'));
+      expect(store.activeVisitFor(uid('Juan Pérez')), v1);
       expect(FieldVisit.fromJson(v1.toJson()).openedAt, v1.openedAt, reason: 'se conserva al reabrir la app');
 
-      await store.markVisitOpened(v2, 'Diego Salas');
-      expect(store.activeVisitFor('Juan Pérez'), v1, reason: 'otro usuario no cuenta');
+      await store.markVisitOpened(v2, uid('Diego Salas'));
+      expect(store.activeVisitFor(uid('Juan Pérez')), v1, reason: 'otro usuario no cuenta');
 
       await store.finishVisit(v1, const GeoPoint(26, -98));
-      expect(store.activeVisitFor('Juan Pérez'), v2, reason: 'una visita finalizada ya no está activa');
+      expect(store.activeVisitFor(uid('Juan Pérez')), v2, reason: 'una visita finalizada ya no está activa');
     });
 
     test('el conteo de evidencias del técnico no suma lo capturado de más', () async {
@@ -278,11 +309,11 @@ void main() {
       final store = await initTestStore();
       final proj = await seedProject(store, start: true);
       final v = store.latestVisit(proj.id)!;
-      expect(store.recentVisitFor('Juan Pérez'), v);
+      expect(store.recentVisitFor(uid('Juan Pérez')), v);
       await store.finishVisit(v, const GeoPoint(26, -98));
-      expect(store.activeVisitFor('Juan Pérez'), isNull);
-      expect(store.recentVisitFor('Juan Pérez'), v);
-      expect(store.recentVisitFor('Diego Salas'), isNull);
+      expect(store.activeVisitFor(uid('Juan Pérez')), isNull);
+      expect(store.recentVisitFor(uid('Juan Pérez')), v);
+      expect(store.recentVisitFor(uid('Diego Salas')), isNull);
     });
 
     test('el admin agrega, renombra y elimina tipos de proyecto', () async {
@@ -297,7 +328,7 @@ void main() {
 
       final proj = await seedProject(store); // usa 'Viabilidad FV'
       final viab = store.catalog(types).firstWhere((t) => t.name == 'Viabilidad FV');
-      expect(store.catalogUses(types, 'Viabilidad FV'), 1);
+      expect(store.catalogUses(types, viab), 1);
       await expectLater(store.removeCatalogItem(types, viab), throwsStateError, reason: 'está en uso');
 
       await store.renameCatalogItem(types, viab, 'Viabilidad fotovoltaica');
@@ -315,7 +346,7 @@ void main() {
       const motives = CatalogKind.visitMotives;
       final maint = await store.addCatalogItem(motives, 'Mantenimiento preventivo');
 
-      final v = await store.createVisit(proj, technician: 'Juan Pérez', motive: maint.name, templateId: other.id);
+      final v = await store.createVisit(proj, technicianId: uid('Juan Pérez'), motiveId: maint.id, templateId: other.id);
       expect(v.templateId, other.id);
       expect(proj.templateId, isNot(other.id), reason: 'el proyecto conserva su plantilla');
       expect(store.templateFor(v).id, other.id);
@@ -325,7 +356,7 @@ void main() {
       final first = store.visitsOf(proj.id).firstWhere((x) => x.id != v.id);
       expect(first.templateId, proj.templateId, reason: 'sin indicar plantilla usa la del proyecto');
 
-      expect(store.catalogUses(motives, maint.name), 1);
+      expect(store.catalogUses(motives, maint), 1);
       await store.renameCatalogItem(motives, maint, 'Mantenimiento');
       expect(v.motive, 'Mantenimiento', reason: 'la visita sigue el nuevo nombre');
       await expectLater(store.removeCatalogItem(motives, maint), throwsStateError, reason: 'está en uso');
@@ -335,7 +366,7 @@ void main() {
       final store = await initTestStore();
       final proj = await seedProject(store, start: true);
       final v1 = store.latestVisit(proj.id)!;
-      final v2 = await store.createVisit(proj, technician: 'Juan Pérez', motive: 'Mediciones adicionales');
+      final v2 = await store.createVisit(proj, technicianId: uid('Juan Pérez'), motiveId: motiveId(store, 'Mediciones adicionales'));
       expect(v2.state, VisitState.porIniciar);
       expect(v1.state, VisitState.enCurso);
       await expectLater(store.approveVisit(v1), throwsStateError, reason: 'aún no termina');
@@ -415,23 +446,21 @@ void main() {
       await db2.close();
     });
 
-    test('una base de la versión anterior gana la tabla de tipos sin perder datos', () async {
+    test('una base de antes de los ids del servidor empieza limpia', () async {
       final dir = Directory.systemTemp.createTempSync('solaris_mig_');
       addTearDown(() => dir.deleteSync(recursive: true));
       final path = p.join(dir.path, 'solaris.db');
 
-      // Base v1 tal como la creaba la app antes: sin la tabla project_types.
+      // Base v3 tal como la creaba la app antes: proyectos con nombres, sin `pending`.
       final old = await databaseFactoryFfi.openDatabase(path,
           options: OpenDatabaseOptions(
-            version: 1,
+            version: 3,
             onCreate: (db, _) async {
-              for (final t in Tables.all.where((t) => t != Tables.projectTypes && t != Tables.visitMotives)) {
-                await db.execute(
-                    'CREATE TABLE $t (id TEXT PRIMARY KEY, parent TEXT, data TEXT NOT NULL, updated_at TEXT NOT NULL)');
-              }
+              await db.execute(
+                  'CREATE TABLE projects (id TEXT PRIMARY KEY, parent TEXT, data TEXT NOT NULL, updated_at TEXT NOT NULL)');
               await db.insert(Tables.projects, {
                 'id': 'p1',
-                'data': '{"marca":"dato previo"}',
+                'data': '{"client":"TRUPER"}',
                 'updated_at': DateTime(2026).toIso8601String(),
               });
             },
@@ -439,11 +468,37 @@ void main() {
       await old.close();
 
       final db = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
-      expect(await db.load(Tables.projectTypes), isEmpty);
-      expect(await db.load(Tables.visitMotives), isEmpty);
-      expect((await db.load(Tables.projects)).single['marca'], 'dato previo');
-      await db.put(Tables.projectTypes, 't1', {'id': 't1', 'name': 'Mantenimiento FV', 'order': 0});
-      expect(await db.load(Tables.projectTypes), hasLength(1));
+      expect(db.wiped, isTrue);
+      expect(await db.load(Tables.projects), isEmpty, reason: 'los datos de prueba se borran');
+      await db.put(Tables.clients, 'c1', {'id': 'c1', 'name': 'TRUPER'});
+      expect(await db.load(Tables.clients), hasLength(1), reason: 'las tablas nuevas existen');
+      await db.close();
+
+      final again = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
+      expect(again.wiped, isFalse);
+      expect(await again.load(Tables.clients), hasLength(1), reason: 'sólo se borra una vez');
+      await again.close();
+    });
+
+    test('lo que cambia queda pendiente de subir y lo borrado no se pierde', () async {
+      final dir = Directory.systemTemp.createTempSync('solaris_pend_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final db = await SqlitePersistence.open(p.join(dir.path, 'solaris.db'), factory: databaseFactoryFfi);
+      for (final memory in [false, true]) {
+        final Persistence d = memory ? MemoryPersistence() : db;
+        await d.put(Tables.visits, 'v1', {'id': 'v1'}, parent: 'p1');
+        await d.put(Tables.visits, 'v2', {'id': 'v2'}, parent: 'p1', pending: false);
+        expect((await d.pending(Tables.visits)).map((r) => r.id), ['v1'], reason: 'lo del servidor no se resube');
+
+        await d.markSynced(Tables.visits, 'v1');
+        expect(await d.pending(Tables.visits), isEmpty);
+
+        await d.removeByParent(Tables.visits, 'p1');
+        expect(await d.load(Tables.visits), isEmpty, reason: 'borrado para la app');
+        final gone = await d.pending(Tables.visits);
+        expect(gone.map((r) => r.id).toSet(), {'v1', 'v2'}, reason: 'falta borrarlas en el servidor');
+        expect(gone.every((r) => r.deleted && r.parent == 'p1'), isTrue);
+      }
       await db.close();
     });
 
@@ -456,14 +511,17 @@ void main() {
       final db1 = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
       SurveyStore.reset();
       final store1 = await SurveyStore.init(db1, FileStore(dir));
-      expect(store1.catalog(types).map((t) => t.name), SurveyStore.catalogDefaults[types]);
+      expect(store1.catalog(types).map((t) => t.name), SurveyStore.catalogDefaults[types]!.map((d) => d.$2));
+      expect(store1.catalog(types).first.id, 'e6b6d468-97a4-426b-bd03-1e2e5206ffed', reason: 'mismo id que en Supabase');
+      expect(await db1.pending(Tables.projectTypes), isEmpty, reason: 'la semilla ya está en el servidor');
       await store1.addCatalogItem(types, 'Inspección termográfica');
       await db1.close();
 
       final db2 = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
       SurveyStore.reset();
       final store2 = await SurveyStore.init(db2, FileStore(dir));
-      expect(store2.catalog(types).map((t) => t.name), [...?SurveyStore.catalogDefaults[types], 'Inspección termográfica']);
+      expect(store2.catalog(types).map((t) => t.name),
+          [...SurveyStore.catalogDefaults[types]!.map((d) => d.$2), 'Inspección termográfica']);
       await db2.close();
     });
   });

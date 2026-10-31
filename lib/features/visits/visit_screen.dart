@@ -38,7 +38,7 @@ class _VisitScreenState extends State<VisitScreen> {
   void initState() {
     super.initState();
     final state = AppState.instance;
-    if (state.role == UserRole.tecnico) _store.markVisitOpened(v, state.userName);
+    if (state.role == UserRole.tecnico) _store.markVisitOpened(v, state.userId);
   }
 
   bool get _canEdit => v.started && !v.finished;

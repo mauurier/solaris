@@ -28,7 +28,7 @@ List<ResolvedQuestion> _pendingCaptures(SurveyStore store, FieldVisit v) {
 /// tiene varias visitas en curso, primero elige en cuál capturar.
 void showQuickCapture(BuildContext context, {FieldVisit? visit}) {
   final store = SurveyStore.instance;
-  final user = AppState.instance.userName;
+  final user = AppState.instance.userId;
   if (visit == null) {
     final running = store.activeVisitsFor(user);
     if (running.length > 1) {
@@ -119,7 +119,7 @@ void _pickVisit(BuildContext context, List<FieldVisit> running) {
             onTap: () {
               Navigator.pop(context);
               // Elegirla cuenta como abrirla: queda como su visita en curso.
-              store.markVisitOpened(v, AppState.instance.userName);
+              store.markVisitOpened(v, AppState.instance.userId);
               showQuickCapture(context, visit: v);
             },
             child: Row(

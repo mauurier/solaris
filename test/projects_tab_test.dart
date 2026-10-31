@@ -15,10 +15,9 @@ void main() {
     final store = await initTestStore();
     final truper = await seedProject(store, start: true); // TRUPER, visita en captura
     final springs = await seedProject(store);
-    springs
-      ..client = 'SPRINGS'
-      ..name = 'Springs Window Fashions';
-    await store.createVisit(springs, technician: 'Diego Salas', motive: 'Mediciones adicionales');
+    await moveToClient(store, springs, 'SPRINGS');
+    springs.name = 'Springs Window Fashions';
+    await store.createVisit(springs, technicianId: uid('Diego Salas'), motiveId: motiveId(store, 'Mediciones adicionales'));
     await store.finishVisit(store.latestVisit(truper.id)!, const GeoPoint(26, -98));
     AppState.instance.setRole(UserRole.admin);
 
@@ -44,7 +43,7 @@ void main() {
     final done = await seedProject(store, start: true);
     await store.finishVisit(store.latestVisit(done.id)!, const GeoPoint(26, -98));
     final other = await seedProject(store, start: true);
-    other.client = 'SPRINGS';
+    await moveToClient(store, other, 'SPRINGS');
     AppState.instance.setRole(UserRole.admin);
 
     await pumpOnPhone(tester, const HomeShell());
@@ -95,11 +94,10 @@ void main() {
   testWidgets('El técnico ve sus proyectos por cliente y sólo sus visitas', (tester) async {
     final store = await initTestStore();
     final shared = await seedProject(store, start: true); // TRUPER, visita de Juan en captura
-    await store.createVisit(shared, technician: 'Diego Salas', motive: 'Mediciones adicionales');
+    await store.createVisit(shared, technicianId: uid('Diego Salas'), motiveId: motiveId(store, 'Mediciones adicionales'));
     final notMine = await seedProject(store);
-    notMine
-      ..client = 'SPRINGS'
-      ..technicians.clear();
+    await moveToClient(store, notMine, 'SPRINGS');
+    notMine.technicianIds.clear();
     AppState.instance.setRole(UserRole.tecnico); // Juan Pérez
 
     await pumpOnPhone(tester, const HomeShell());
@@ -121,7 +119,7 @@ void main() {
     final store = await initTestStore();
     await seedProject(store, start: true); // en captura
     final waiting = await seedProject(store); // asignado
-    waiting.client = 'SPRINGS';
+    await moveToClient(store, waiting, 'SPRINGS');
     AppState.instance.setRole(UserRole.tecnico);
 
     await pumpOnPhone(tester, const HomeShell());
@@ -134,7 +132,7 @@ void main() {
   test('El estado de seguimiento del supervisor sale de las visitas', () async {
     final store = await initTestStore();
     final unassigned = await seedProject(store);
-    unassigned.technicians.clear();
+    unassigned.technicianIds.clear();
     expect(followUpStateOf(unassigned), FollowUpState.sinAsignar);
 
     final waiting = await seedProject(store); // visita con fecha programada
@@ -157,10 +155,10 @@ void main() {
     final toReview = await seedProject(store, start: true);
     await store.finishVisit(store.latestVisit(toReview.id)!, const GeoPoint(26, -98));
     final unassigned = await seedProject(store);
+    await moveToClient(store, unassigned, 'SPRINGS');
     unassigned
-      ..client = 'SPRINGS'
       ..name = 'Springs Window Fashions'
-      ..technicians.clear();
+      ..technicianIds.clear();
     AppState.instance.setRole(UserRole.supervisor);
 
     await pumpOnPhone(tester, const HomeShell());

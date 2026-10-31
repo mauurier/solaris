@@ -4,6 +4,7 @@ import '../../core/services/formatting.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
+import '../../data/auth/user_directory.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
 import '../../data/survey/entities.dart';
@@ -36,7 +37,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   void initState() {
     super.initState();
     final state = AppState.instance;
-    if (state.role == UserRole.tecnico) _store.markProjectOpened(p.id, state.userName);
+    if (state.role == UserRole.tecnico) _store.markProjectOpened(p.id, state.userId);
   }
 
   bool get _isManager {
@@ -351,10 +352,11 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   // --------------------------------------------------------------- acciones
   Future<void> _assign() async {
-    final supervisors = Mock.users.where((u) => u.role == UserRole.supervisor && u.active).map((u) => u.name).toList();
-    final techs = Mock.users.where((u) => u.role == UserRole.tecnico && u.active).map((u) => u.name).toList();
-    var supervisor = p.supervisor;
-    final selected = {...p.technicians};
+    final users = UserDirectory.instance;
+    final supervisors = users.assignable(UserRole.supervisor);
+    final techs = users.assignable(UserRole.tecnico);
+    var supervisor = p.supervisorId;
+    final selected = {...p.technicianIds};
 
     final saved = await showAppSheet<bool>(
       context,
@@ -371,7 +373,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               runSpacing: 8,
               children: [
                 for (final s in supervisors)
-                  ChoicePill(label: s, selected: supervisor == s, onTap: () => setSheet(() => supervisor = s)),
+                  ChoicePill(label: s.name, selected: supervisor == s.id, onTap: () => setSheet(() => supervisor = s.id)),
               ],
             ),
             const SizedBox(height: 18),
@@ -382,10 +384,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               children: [
                 for (final t in techs)
                   ChoicePill(
-                    label: t,
-                    selected: selected.contains(t),
+                    label: t.name,
+                    selected: selected.contains(t.id),
                     check: true,
-                    onTap: () => setSheet(() => selected.contains(t) ? selected.remove(t) : selected.add(t)),
+                    onTap: () => setSheet(() => selected.contains(t.id) ? selected.remove(t.id) : selected.add(t.id)),
                   ),
               ],
             ),
@@ -396,15 +398,17 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       ),
     );
     if (saved != true) return;
-    p.supervisor = supervisor;
-    p.technicians = selected.toList();
+    p.supervisorId = supervisor;
+    p.technicianIds = selected.toList();
     // Las visitas aún no iniciadas pasan al primer técnico si el suyo se quitó.
     for (final v in _store.visitsOf(p.id).where((v) => !v.started)) {
-      v.supervisor = supervisor;
-      if (!p.technicians.contains(v.technician) && p.technicians.isNotEmpty) v.technician = p.technicians.first;
+      v.supervisorId = supervisor;
+      if (!p.technicianIds.contains(v.technicianId) && p.technicianIds.isNotEmpty) {
+        v.technicianId = p.technicianIds.first;
+      }
     }
-    if (_store.visitsOf(p.id).isEmpty && p.technicians.isNotEmpty) {
-      await _store.createVisit(p, technician: p.technicians.first, motive: 'Levantamiento inicial');
+    if (_store.visitsOf(p.id).isEmpty && p.technicianIds.isNotEmpty) {
+      await _store.createVisit(p, technicianId: p.technicianIds.first, motiveId: null);
     } else {
       await _store.updateProject(p);
       for (final v in _store.visitsOf(p.id).where((v) => !v.started)) {

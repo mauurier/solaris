@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config/supabase_config.dart';
 import 'profile.dart';
+import 'user_directory.dart';
 
 /// Error que se le puede mostrar tal cual al usuario.
 class AuthFailure implements Exception {
@@ -127,6 +128,7 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_profileKey);
     await prefs.remove(_rememberKey);
+    await UserDirectory.instance.clear();
   }
 
   Future<Profile?> _fetchProfile() async {

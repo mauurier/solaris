@@ -1,7 +1,15 @@
 import 'dart:convert';
 
+import '../auth/user_directory.dart';
+import '../catalog.dart';
 import '../models.dart';
+import '../survey_store.dart';
 import 'template.dart';
+
+/// Nombre de un usuario para mostrar; los registros guardan su id de `perfil`.
+String _userName(String? id) => UserDirectory.instance.nameOf(id);
+
+SurveyStore? get _store => SurveyStore.isReady ? SurveyStore.instance : null;
 
 /// Coordenada capturada por el GPS del teléfono.
 class GeoPoint {
@@ -53,20 +61,60 @@ class DocCategory {
   static DocCategory byId(String id) => all.firstWhere((c) => c.id == id, orElse: () => all.last);
 }
 
+/// Cliente (tabla `cliente`).
+class SurveyClient {
+  SurveyClient({required this.id, required this.name, this.rfc = '', this.contact = ''});
+
+  final String id;
+
+  /// Razón social.
+  String name;
+  String rfc;
+  String contact;
+
+  Map<String, Object?> toJson() => {'id': id, 'name': name, 'rfc': rfc, 'contact': contact};
+
+  static SurveyClient fromJson(Map<String, Object?> j) => SurveyClient(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        rfc: j['rfc'] as String? ?? '',
+        contact: j['contact'] as String? ?? '',
+      );
+}
+
+/// Sitio de un cliente (tabla `sitio`): nave, CEDIS, planta…
+class SurveySite {
+  SurveySite({required this.id, required this.clientId, required this.name, this.address = '', this.coords});
+
+  final String id;
+  final String clientId;
+  String name;
+  String address;
+  GeoPoint? coords;
+
+  Map<String, Object?> toJson() =>
+      {'id': id, 'clientId': clientId, 'name': name, 'address': address, 'coords': coords?.toJson()};
+
+  static SurveySite fromJson(Map<String, Object?> j) => SurveySite(
+        id: j['id'] as String,
+        clientId: j['clientId'] as String,
+        name: j['name'] as String,
+        address: j['address'] as String? ?? '',
+        coords: GeoPoint.fromJson(j['coords']),
+      );
+}
+
 class SurveyProject {
   SurveyProject({
     required this.id,
     required this.code,
     required this.name,
-    required this.client,
-    required this.site,
-    required this.address,
-    required this.supervisor,
-    required this.technicians,
+    required this.siteId,
+    required this.supervisorId,
+    required this.technicianIds,
     required this.templateId,
-    required this.type,
+    required this.typeId,
     required this.createdAt,
-    this.coords,
     this.scheduledAt,
     this.description = '',
     this.status = ProjectStatus.asignado,
@@ -78,32 +126,38 @@ class SurveyProject {
   /// Clave del cliente o del sitio (REY01202). Da nombre al ZIP y a los archivos.
   String code;
   String name;
-  String client;
-  String site;
-  String address;
-  GeoPoint? coords;
-  String supervisor;
-  List<String> technicians;
+  String siteId;
+
+  /// Ids de `perfil`.
+  String? supervisorId;
+  List<String> technicianIds;
   String templateId;
-  String type;
+  String? typeId;
   String description;
   DateTime createdAt;
   DateTime? scheduledAt;
   ProjectStatus status;
   DateTime updatedAt;
 
+  SurveySite? get _site => _store?.site(siteId);
+  String? get clientId => _site?.clientId;
+  String get client => _store?.client(clientId)?.name ?? '';
+  String get site => _site?.name ?? '';
+  String get address => _site?.address ?? '';
+  GeoPoint? get coords => _site?.coords;
+  String get supervisor => _userName(supervisorId);
+  List<String> get technicians => List.unmodifiable([for (final id in technicianIds) _userName(id)]);
+  String get type => _store?.catalogName(CatalogKind.projectTypes, typeId) ?? '';
+
   Map<String, Object?> toJson() => {
         'id': id,
         'code': code,
         'name': name,
-        'client': client,
-        'site': site,
-        'address': address,
-        'coords': coords?.toJson(),
-        'supervisor': supervisor,
-        'technicians': technicians,
+        'siteId': siteId,
+        'supervisorId': supervisorId,
+        'technicianIds': technicianIds,
         'templateId': templateId,
-        'type': type,
+        'typeId': typeId,
         'description': description,
         'createdAt': createdAt.toIso8601String(),
         'scheduledAt': scheduledAt?.toIso8601String(),
@@ -115,14 +169,11 @@ class SurveyProject {
         id: j['id'] as String,
         code: j['code'] as String,
         name: j['name'] as String,
-        client: j['client'] as String,
-        site: j['site'] as String,
-        address: j['address'] as String? ?? '',
-        coords: GeoPoint.fromJson(j['coords']),
-        supervisor: j['supervisor'] as String? ?? '',
-        technicians: (j['technicians'] as List).cast<String>().toList(),
+        siteId: j['siteId'] as String,
+        supervisorId: j['supervisorId'] as String?,
+        technicianIds: (j['technicianIds'] as List).cast<String>().toList(),
         templateId: j['templateId'] as String,
-        type: j['type'] as String? ?? '',
+        typeId: j['typeId'] as String?,
         description: j['description'] as String? ?? '',
         createdAt: DateTime.parse(j['createdAt'] as String),
         scheduledAt: DateTime.tryParse(j['scheduledAt'] as String? ?? ''),
@@ -141,7 +192,7 @@ class ProjectDocument {
     required this.originalName,
     required this.size,
     required this.addedAt,
-    required this.addedBy,
+    required this.addedById,
   });
 
   final String id;
@@ -153,7 +204,10 @@ class ProjectDocument {
   final String originalName;
   final int size;
   final DateTime addedAt;
-  final String addedBy;
+
+  /// Id de `perfil`.
+  final String? addedById;
+  String get addedBy => _userName(addedById);
 
   DocCategory get cat => DocCategory.byId(category);
 
@@ -165,7 +219,7 @@ class ProjectDocument {
         'originalName': originalName,
         'size': size,
         'addedAt': addedAt.toIso8601String(),
-        'addedBy': addedBy,
+        'addedById': addedById,
       };
 
   static ProjectDocument fromJson(Map<String, Object?> j) => ProjectDocument(
@@ -176,7 +230,7 @@ class ProjectDocument {
         originalName: j['originalName'] as String,
         size: j['size'] as int? ?? 0,
         addedAt: DateTime.parse(j['addedAt'] as String),
-        addedBy: j['addedBy'] as String? ?? '',
+        addedById: j['addedById'] as String?,
       );
 }
 
@@ -185,9 +239,9 @@ class FieldVisit {
     required this.id,
     required this.projectId,
     required this.number,
-    required this.technician,
-    required this.supervisor,
-    required this.motive,
+    required this.technicianId,
+    required this.supervisorId,
+    required this.motiveId,
     required this.templateId,
     this.scheduledAt,
     this.status = ProjectStatus.asignado,
@@ -206,9 +260,13 @@ class FieldVisit {
   final String id;
   final String projectId;
   final int number;
-  String technician;
-  String supervisor;
-  String motive;
+
+  /// Ids de `perfil`.
+  String? technicianId;
+  String? supervisorId;
+
+  /// Nulo en el levantamiento inicial (primera visita del proyecto).
+  String? motiveId;
   final String templateId;
   DateTime? scheduledAt;
   ProjectStatus status;
@@ -231,6 +289,13 @@ class FieldVisit {
   Map<String, String> justifications;
   String notes;
 
+  static const initialMotive = 'Levantamiento inicial';
+
+  String get technician => _userName(technicianId);
+  String get supervisor => _userName(supervisorId);
+  String get motive =>
+      motiveId == null ? initialMotive : _store?.catalogName(CatalogKind.visitMotives, motiveId) ?? '';
+
   String get label => 'VIS-${number.toString().padLeft(3, '0')}';
   bool get started => startedAt != null;
   bool get finished => endedAt != null;
@@ -241,9 +306,9 @@ class FieldVisit {
         'id': id,
         'projectId': projectId,
         'number': number,
-        'technician': technician,
-        'supervisor': supervisor,
-        'motive': motive,
+        'technicianId': technicianId,
+        'supervisorId': supervisorId,
+        'motiveId': motiveId,
         'templateId': templateId,
         'scheduledAt': scheduledAt?.toIso8601String(),
         'status': status.name,
@@ -262,9 +327,9 @@ class FieldVisit {
         id: j['id'] as String,
         projectId: j['projectId'] as String,
         number: j['number'] as int,
-        technician: j['technician'] as String,
-        supervisor: j['supervisor'] as String? ?? '',
-        motive: j['motive'] as String? ?? '',
+        technicianId: j['technicianId'] as String?,
+        supervisorId: j['supervisorId'] as String?,
+        motiveId: j['motiveId'] as String?,
         templateId: j['templateId'] as String,
         scheduledAt: DateTime.tryParse(j['scheduledAt'] as String? ?? ''),
         status: ProjectStatus.values.byName(j['status'] as String),
@@ -306,7 +371,7 @@ class Evidence {
     required this.kind,
     required this.path,
     required this.capturedAt,
-    required this.user,
+    required this.userId,
     this.originalName = '',
     this.point,
     this.comment = '',
@@ -324,7 +389,10 @@ class Evidence {
   /// Ruta relativa a la carpeta de datos de la app.
   String path;
   DateTime capturedAt;
-  final String user;
+
+  /// Id de `perfil` de quien capturó.
+  final String? userId;
+  String get user => _userName(userId);
   String originalName;
   GeoPoint? point;
   String comment;
@@ -341,7 +409,7 @@ class Evidence {
         'kind': kind.name,
         'path': path,
         'capturedAt': capturedAt.toIso8601String(),
-        'user': user,
+        'userId': userId,
         'originalName': originalName,
         'point': point?.toJson(),
         'comment': comment,
@@ -356,7 +424,7 @@ class Evidence {
         kind: EvidenceKind.values.byName(j['kind'] as String),
         path: j['path'] as String,
         capturedAt: DateTime.parse(j['capturedAt'] as String),
-        user: j['user'] as String? ?? '',
+        userId: j['userId'] as String?,
         originalName: j['originalName'] as String? ?? '',
         point: GeoPoint.fromJson(j['point']),
         comment: j['comment'] as String? ?? '',

@@ -76,13 +76,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     return ListenableBuilder(
       listenable: Listenable.merge([store, state, HomeNav.projectsFilter]),
       builder: (context, _) {
-        final all = store.projectsFor(state.role, state.userName);
+        final all = store.projectsFor(state.role, state.userId);
         final list = all.where(_matches).toList();
         final canCreate = state.role == UserRole.admin || state.role == UserRole.supervisor;
         final isField = state.role == UserRole.tecnico;
         final isSupervisor = state.role == UserRole.supervisor;
         // El técnico sólo cuenta y ve sus propias visitas, como en su pestaña Visitas.
-        final technician = isField ? state.userName : null;
+        final technician = isField ? state.userId : null;
 
         final body = SafeArea(
           bottom: false,
@@ -213,11 +213,12 @@ class _ClientHeader extends StatelessWidget {
   }
 }
 
+/// [technician] es el id de `perfil` del técnico.
 List<FieldVisit> _visitsFor(SurveyStore store, SurveyProject p, String? technician) =>
-    store.visitsOf(p.id).where((v) => technician == null || v.technician == technician).toList();
+    store.visitsOf(p.id).where((v) => technician == null || v.technicianId == technician).toList();
 
 /// Resumen de un proyecto: cuántas visitas tiene y en qué estado está cada una.
-/// Con [technician], sólo las visitas asignadas a ese técnico.
+/// Con [technician] (id de `perfil`), sólo las visitas asignadas a ese técnico.
 Future<void> showProjectVisitsSheet(BuildContext context, SurveyProject project, {String? technician}) {
   final store = SurveyStore.instance;
   final visits = _visitsFor(store, project, technician);
@@ -392,7 +393,7 @@ FollowUpState followUpStateOf(SurveyProject p) {
   final visits = SurveyStore.instance.visitsOf(p.id);
   bool any(VisitState s) => visits.any((v) => v.state == s);
   final waiting = visits.where((v) => v.state == VisitState.porIniciar);
-  if (p.technicians.isEmpty || visits.isEmpty) return FollowUpState.sinAsignar;
+  if (p.technicianIds.isEmpty || visits.isEmpty) return FollowUpState.sinAsignar;
   if (any(VisitState.finalizada)) return FollowUpState.sinRevisar;
   if (any(VisitState.enCurso)) return FollowUpState.enCurso;
   if (waiting.isNotEmpty && waiting.every((v) => v.scheduledAt == null)) return FollowUpState.sinProgramar;

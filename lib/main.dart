@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
 import 'data/auth/auth_service.dart';
+import 'data/auth/user_directory.dart';
 import 'data/mock_data.dart';
 import 'data/survey_store.dart';
 import 'features/auth/login_screen.dart';
@@ -85,6 +88,7 @@ class _StartupState extends State<_Startup> {
       final profile = await AuthService.instance.restore();
       if (profile == null) return const LoginScreen();
       AppState.instance.signIn(profile);
+      unawaited(UserDirectory.instance.start());
       return const HomeShell();
     } on AuthFailure catch (e) {
       return LoginScreen(message: e.message);

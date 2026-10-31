@@ -49,7 +49,10 @@ class SurveyStore extends ChangeNotifier {
   static Future<SurveyStore> initDefault() async {
     final dir = await getApplicationDocumentsDirectory();
     final db = await SqlitePersistence.open(p.join(dir.path, 'solaris.db'));
-    return init(db, FileStore(Directory(p.join(dir.path, 'solaris_media'))));
+    final files = FileStore(Directory(p.join(dir.path, 'solaris_media')));
+    // Los archivos de los datos de prueba borrados con la base anterior.
+    if (db.wiped) await files.deleteDir('media');
+    return init(db, files);
   }
 
   static Future<SurveyStore> init(Persistence db, FileStore files) async {
@@ -64,20 +67,28 @@ class SurveyStore extends ChangeNotifier {
   static void reset() => _instance = null;
 
   final templates = <TemplateDef>[];
+  final clients = <SurveyClient>[];
+  final sites = <SurveySite>[];
   final projects = <SurveyProject>[];
   final documents = <ProjectDocument>[];
   final visits = <FieldVisit>[];
   final _answers = <String, Map<String, String>>{};
   final evidences = <Evidence>[];
 
-  /// Valores con los que arranca cada catálogo en una instalación nueva.
+  /// Valores con los que arranca cada catálogo en una instalación nueva. Los
+  /// ids son los de la semilla de la migración en Supabase.
   static const catalogDefaults = {
-    CatalogKind.projectTypes: ['Viabilidad FV', 'Levantamiento eléctrico', 'Auditoría FV', 'Mantenimiento FV'],
+    CatalogKind.projectTypes: [
+      ('e6b6d468-97a4-426b-bd03-1e2e5206ffed', 'Viabilidad FV'),
+      ('ea668741-7260-4c3e-8315-427c745def20', 'Levantamiento eléctrico'),
+      ('6e0e2d68-e19c-4055-aa64-543ce1117e3b', 'Auditoría FV'),
+      ('b81f5896-3ab3-4818-b041-6d59c6952b3d', 'Mantenimiento FV'),
+    ],
     CatalogKind.visitMotives: [
-      'Información incompleta',
-      'Mediciones adicionales',
-      'Corrección de información',
-      'Actividades posteriores',
+      ('24a85d2f-329a-4480-98cf-35df3e5b115b', 'Información incompleta'),
+      ('4dcae868-a14f-461c-8554-ce15db2bf717', 'Mediciones adicionales'),
+      ('5cf58ef5-c63d-4ebe-a9a3-a1273fbf640c', 'Corrección de información'),
+      ('b95699bc-09d3-4d43-8918-6cdf92070694', 'Actividades posteriores'),
     ],
   };
 
@@ -85,31 +96,23 @@ class SurveyStore extends ChangeNotifier {
     CatalogKind.projectTypes: Catalog(
       db,
       Tables.projectTypes,
-      uses: (name) => projects.where((p) => p.type == name).length,
-      renameUses: (from, to) async {
-        for (final p in projects.where((p) => p.type == from)) {
-          p.type = to;
-          await db.put(Tables.projects, p.id, p.toJson());
-        }
-      },
+      uses: (id) => projects.where((p) => p.typeId == id).length,
     ),
     CatalogKind.visitMotives: Catalog(
       db,
       Tables.visitMotives,
-      uses: (name) => visits.where((v) => v.motive == name).length,
-      renameUses: (from, to) async {
-        for (final v in visits.where((v) => v.motive == from)) {
-          v.motive = to;
-          await db.put(Tables.visits, v.id, v.toJson(), parent: v.projectId);
-        }
-      },
+      uses: (id) => visits.where((v) => v.motiveId == id).length,
     ),
   };
 
-  String get _user => AppState.instance.userName;
+  /// Id de `perfil` de quien hace el cambio.
+  String get _userId => AppState.instance.userId;
+  String get _userName => AppState.instance.userName;
 
   Future<void> _load() async {
     templates.addAll((await db.load(Tables.templates)).map(TemplateDef.fromJson));
+    clients.addAll((await db.load(Tables.clients)).map(SurveyClient.fromJson));
+    sites.addAll((await db.load(Tables.sites)).map(SurveySite.fromJson));
     projects.addAll((await db.load(Tables.projects)).map(SurveyProject.fromJson));
     documents.addAll((await db.load(Tables.documents)).map(ProjectDocument.fromJson));
     visits.addAll((await db.load(Tables.visits)).map(FieldVisit.fromJson));
@@ -125,8 +128,11 @@ class SurveyStore extends ChangeNotifier {
     for (final e in _catalogs.entries) {
       await e.value.load(catalogDefaults[e.key]!);
     }
+    clients.sort(_byName);
     projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
   }
+
+  static int _byName(SurveyClient a, SurveyClient b) => a.name.toLowerCase().compareTo(b.name.toLowerCase());
 
   // ---------------------------------------------------------------- plantillas
 
@@ -157,7 +163,7 @@ class SurveyStore extends ChangeNotifier {
   Future<TemplateDef> duplicateTemplate(TemplateDef source) async {
     final copy = TemplateDef.fromJson({
       ...source.toJson(),
-      'id': 'tpl-${_uuid.v4()}',
+      'id': _uuid.v4(),
       'name': '${source.name} (copia)',
       'major': 1,
       'minor': 0,
@@ -186,8 +192,11 @@ class SurveyStore extends ChangeNotifier {
 
   List<CatalogItem> catalog(CatalogKind kind) => _catalogs[kind]!.items;
 
-  /// Registros que usan el nombre; sólo se puede borrar si no hay ninguno.
-  int catalogUses(CatalogKind kind, String name) => _catalogs[kind]!.uses(name);
+  /// Nombre del elemento; vacío si no existe (p. ej. se borró).
+  String catalogName(CatalogKind kind, String? id) => _catalogs[kind]!.byId(id)?.name ?? '';
+
+  /// Registros que usan el elemento; sólo se puede borrar si no hay ninguno.
+  int catalogUses(CatalogKind kind, CatalogItem item) => _catalogs[kind]!.uses(item.id);
 
   /// Motivo por el que [name] no es válido, o `null` si se puede usar.
   String? validateCatalogName(CatalogKind kind, String name, {CatalogItem? except}) =>
@@ -199,7 +208,6 @@ class SurveyStore extends ChangeNotifier {
     return item;
   }
 
-  /// Renombra y actualiza los proyectos o visitas que usaban el nombre anterior.
   Future<void> renameCatalogItem(CatalogKind kind, CatalogItem item, String name) async {
     await _catalogs[kind]!.rename(item, name);
     notifyListeners();
@@ -210,56 +218,110 @@ class SurveyStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --------------------------------------------------------- clientes y sitios
+
+  SurveyClient? client(String? id) => clients.where((c) => c.id == id).firstOrNull;
+  SurveySite? site(String? id) => sites.where((s) => s.id == id).firstOrNull;
+  List<SurveySite> sitesOf(String clientId) => sites.where((s) => s.clientId == clientId).toList();
+
+  /// Proyectos de los sitios del cliente.
+  int projectsOfClient(String clientId) => projects.where((p) => p.clientId == clientId).length;
+
+  /// Motivo por el que el cliente no es válido, o `null` si se puede guardar.
+  String? validateClient(String name, {String rfc = '', SurveyClient? except}) {
+    final n = name.trim();
+    if (n.isEmpty) return 'Escribe la razón social';
+    final r = rfc.trim().toUpperCase();
+    if (r.isNotEmpty && clients.any((c) => c != except && c.rfc.toUpperCase() == r)) {
+      return 'Ya hay un cliente con ese RFC';
+    }
+    if (clients.any((c) => c != except && c.name.toLowerCase() == n.toLowerCase())) {
+      return 'Ya existe un cliente con ese nombre';
+    }
+    return null;
+  }
+
+  Future<SurveyClient> addClient(String name, {String rfc = '', String contact = ''}) async {
+    final error = validateClient(name, rfc: rfc);
+    if (error != null) throw ArgumentError(error);
+    final c = SurveyClient(id: _uuid.v4(), name: name.trim(), rfc: rfc.trim().toUpperCase(), contact: contact.trim());
+    clients
+      ..add(c)
+      ..sort(_byName);
+    await db.put(Tables.clients, c.id, c.toJson());
+    notifyListeners();
+    return c;
+  }
+
+  Future<void> updateClient(SurveyClient c) async {
+    clients.sort(_byName);
+    await db.put(Tables.clients, c.id, c.toJson());
+    notifyListeners();
+  }
+
+  /// El sitio del cliente con ese nombre, o uno nuevo. La dirección y las
+  /// coordenadas escritas en el alta de proyecto actualizan las del sitio.
+  Future<SurveySite> _siteFor(String clientId, String name, String address, GeoPoint? coords) async {
+    final n = name.trim();
+    final existing = sitesOf(clientId).where((s) => s.name.toLowerCase() == n.toLowerCase()).firstOrNull;
+    final site = existing ?? SurveySite(id: _uuid.v4(), clientId: clientId, name: n);
+    if (existing == null) sites.add(site);
+    if (address.trim().isNotEmpty) site.address = address.trim();
+    if (coords != null) site.coords = coords;
+    await db.put(Tables.sites, site.id, site.toJson(), parent: clientId);
+    return site;
+  }
+
   // ---------------------------------------------------------------- proyectos
 
   SurveyProject? project(String id) => projects.where((p) => p.id == id).firstOrNull;
 
   /// El técnico sólo ve los proyectos que tiene asignados.
-  List<SurveyProject> projectsFor(UserRole role, String user) {
+  List<SurveyProject> projectsFor(UserRole role, String userId) {
     if (role != UserRole.tecnico) return List.of(projects);
-    return projects.where((p) => p.technicians.contains(user)).toList();
+    return projects.where((p) => p.technicianIds.contains(userId)).toList();
   }
 
+  /// [supervisorId] y [technicianIds] son ids de `perfil`; el primer técnico
+  /// recibe el levantamiento inicial.
   Future<SurveyProject> createProject({
     required String code,
     required String name,
-    required String client,
+    required String clientId,
     required String site,
     required String address,
     required GeoPoint? coords,
     required DateTime? scheduledAt,
-    required String supervisor,
-    required List<String> technicians,
+    required String? supervisorId,
+    required List<String> technicianIds,
     required TemplateDef template,
-    required String type,
+    required String? typeId,
     String description = '',
     List<PickedDocument> docs = const [],
   }) async {
     final now = DateTime.now();
+    final s = await _siteFor(clientId, site, address, coords);
     final project = SurveyProject(
       id: _uuid.v4(),
       code: code.trim().toUpperCase(),
       name: name.trim(),
-      client: client,
-      site: site.trim(),
-      address: address.trim(),
-      coords: coords,
+      siteId: s.id,
       scheduledAt: scheduledAt,
-      supervisor: supervisor,
-      technicians: technicians,
+      supervisorId: supervisorId,
+      technicianIds: technicianIds,
       templateId: template.id,
-      type: type,
+      typeId: typeId,
       description: description.trim(),
       createdAt: now,
-      status: technicians.isEmpty ? ProjectStatus.borrador : ProjectStatus.asignado,
+      status: technicianIds.isEmpty ? ProjectStatus.borrador : ProjectStatus.asignado,
     );
     projects.insert(0, project);
     await db.put(Tables.projects, project.id, project.toJson());
     for (final d in docs) {
       await _addDocument(project.id, d.category, d.file, d.name);
     }
-    if (technicians.isNotEmpty) {
-      await _createVisit(project, technicians.first, 'Levantamiento inicial', scheduledAt);
+    if (technicianIds.isNotEmpty) {
+      await _createVisit(project, technicianIds.first, null, scheduledAt);
     }
     notifyListeners();
     return project;
@@ -314,7 +376,7 @@ class SurveyStore extends ChangeNotifier {
       originalName: name,
       size: files.sizeOf(rel),
       addedAt: DateTime.now(),
-      addedBy: _user,
+      addedById: _userId,
     );
     documents.add(doc);
     await db.put(Tables.documents, doc.id, doc.toJson(), parent: projectId);
@@ -340,28 +402,28 @@ class SurveyStore extends ChangeNotifier {
   /// Visita que el usuario tiene iniciada y sin cerrar, si hay alguna.
   /// Visita en curso del técnico: la del último proyecto activo que abrió.
   /// Si aún no ha abierto ninguna, la iniciada más recientemente.
-  FieldVisit? activeVisitFor(String user) => activeVisitsFor(user).firstOrNull;
+  FieldVisit? activeVisitFor(String userId) => activeVisitsFor(userId).firstOrNull;
 
   /// Visitas en curso del técnico, de la que abrió al último a la más antigua.
-  List<FieldVisit> activeVisitsFor(String user) {
+  List<FieldVisit> activeVisitsFor(String userId) {
     DateTime last(FieldVisit v) => v.openedAt ?? v.startedAt!;
-    return visits.where((v) => v.started && !v.finished && v.technician == user).toList()
+    return visits.where((v) => v.started && !v.finished && v.technicianId == userId).toList()
       ..sort((a, b) => last(b).compareTo(last(a)));
   }
 
   /// Visita de referencia del inicio del técnico: la en curso que abrió al
   /// último o, si no tiene ninguna, la que terminó más recientemente.
-  FieldVisit? recentVisitFor(String user) {
-    final active = activeVisitFor(user);
+  FieldVisit? recentVisitFor(String userId) {
+    final active = activeVisitFor(userId);
     if (active != null) return active;
-    final done = visits.where((v) => v.finished && v.technician == user).toList()
+    final done = visits.where((v) => v.finished && v.technicianId == userId).toList()
       ..sort((a, b) => b.endedAt!.compareTo(a.endedAt!));
     return done.firstOrNull;
   }
 
   /// El técnico abrió la visita; sólo cuenta si es suya y está en curso.
-  Future<void> markVisitOpened(FieldVisit v, String user) async {
-    if (v.technician != user || !v.started || v.finished) return;
+  Future<void> markVisitOpened(FieldVisit v, String userId) async {
+    if (v.technicianId != userId || !v.started || v.finished) return;
     v.openedAt = DateTime.now();
     // Abrir no es modificar: no se toca la actividad del proyecto.
     await db.put(Tables.visits, v.id, v.toJson(), parent: v.projectId);
@@ -369,32 +431,33 @@ class SurveyStore extends ChangeNotifier {
   }
 
   /// El técnico abrió el proyecto: cuenta como abrir su visita en curso.
-  Future<void> markProjectOpened(String projectId, String user) async {
-    final v = visitsOf(projectId).where((v) => v.started && !v.finished && v.technician == user).firstOrNull;
-    if (v != null) await markVisitOpened(v, user);
+  Future<void> markProjectOpened(String projectId, String userId) async {
+    final v = visitsOf(projectId).where((v) => v.started && !v.finished && v.technicianId == userId).firstOrNull;
+    if (v != null) await markVisitOpened(v, userId);
   }
 
   /// Visita adicional. Por defecto usa la plantilla del proyecto, pero puede
   /// llevar otra (p. ej. una de mantenimiento en un proyecto de viabilidad).
+  /// [motiveId] nulo = levantamiento inicial.
   Future<FieldVisit> createVisit(SurveyProject project,
-      {required String technician, required String motive, DateTime? scheduledAt, String? templateId}) async {
-    final v = await _createVisit(project, technician, motive, scheduledAt, templateId: templateId);
-    if (!project.technicians.contains(technician)) project.technicians.add(technician);
+      {required String technicianId, required String? motiveId, DateTime? scheduledAt, String? templateId}) async {
+    final v = await _createVisit(project, technicianId, motiveId, scheduledAt, templateId: templateId);
+    if (!project.technicianIds.contains(technicianId)) project.technicianIds.add(technicianId);
     project.status = ProjectStatus.asignado;
     await updateProject(project);
     return v;
   }
 
-  Future<FieldVisit> _createVisit(SurveyProject project, String technician, String motive, DateTime? scheduledAt,
+  Future<FieldVisit> _createVisit(SurveyProject project, String technicianId, String? motiveId, DateTime? scheduledAt,
       {String? templateId}) async {
     final number = visitsOf(project.id).fold(0, (m, v) => v.number > m ? v.number : m) + 1;
     final v = FieldVisit(
       id: _uuid.v4(),
       projectId: project.id,
       number: number,
-      technician: technician,
-      supervisor: project.supervisor,
-      motive: motive,
+      technicianId: technicianId,
+      supervisorId: project.supervisorId,
+      motiveId: motiveId,
       templateId: templateId ?? project.templateId,
       scheduledAt: scheduledAt,
     );
@@ -498,7 +561,7 @@ class SurveyStore extends ChangeNotifier {
     if (reason == null || reason.trim().isEmpty) {
       v.justifications.remove(key.toString());
     } else {
-      v.justifications[key.toString()] = '${reason.trim()} — $_user';
+      v.justifications[key.toString()] = '${reason.trim()} — $_userName';
     }
     await _saveVisit(v);
     notifyListeners();
@@ -521,7 +584,7 @@ class SurveyStore extends ChangeNotifier {
       await db.put(
         Tables.answers,
         rowId,
-        {'visitId': v.id, 'key': k, 'value': value, 'user': _user, 'at': DateTime.now().toIso8601String()},
+        {'visitId': v.id, 'key': k, 'value': value, 'userId': _userId, 'at': DateTime.now().toIso8601String()},
         parent: v.id,
       );
     }
@@ -562,7 +625,7 @@ class SurveyStore extends ChangeNotifier {
       kind: kind,
       path: rel,
       capturedAt: capturedAt ?? DateTime.now(),
-      user: _user,
+      userId: _userId,
       originalName: originalName.isNotEmpty ? originalName : p.basename(file.path),
       point: point,
       comment: comment,

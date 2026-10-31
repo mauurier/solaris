@@ -39,6 +39,7 @@ void main() {
   });
 
   testWidgets('El alta de proyecto valida cada paso y crea la visita', (tester) async {
+    await store.addClient('TRUPER');
     AppState.instance.setRole(UserRole.supervisor);
     await pumpPushed(tester, const NewProjectScreen());
 
@@ -79,6 +80,10 @@ void main() {
     expect(p.code, 'REY00607');
     expect(p.coords!.lat, closeTo(26.0734, 1e-6));
     expect(store.latestVisit(p.id)!.technician, 'Juan Pérez');
+    expect(store.latestVisit(p.id)!.technicianId, uid('Juan Pérez'), reason: 'se guarda el id, no el nombre');
+    expect(store.latestVisit(p.id)!.motive, 'Levantamiento inicial');
+    expect(p.client, 'TRUPER');
+    expect(store.sites.single.clientId, p.clientId, reason: 'el sitio queda ligado al cliente');
     expect(find.byType(ProjectDetailScreen), findsOneWidget);
     expectNoRenderErrors(tester);
   });

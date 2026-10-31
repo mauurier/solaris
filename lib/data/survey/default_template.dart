@@ -11,7 +11,8 @@ TemplateDef defaultElectricTemplate() {
   const sfvYes = ShowIf(questionId: 'existe', equals: yes);
 
   return TemplateDef(
-    id: 'tpl-levantamiento-electrico-fv',
+    // Fijo para que todos los teléfonos suban la misma plantilla (tabla `plantilla`).
+    id: '015c2871-6002-4d95-94ca-8e95d12e8b35',
     name: 'Levantamiento eléctrico FV',
     type: 'Viabilidad fotovoltaica',
     sections: [

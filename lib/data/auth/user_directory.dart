@@ -36,7 +36,20 @@ class UserDirectory extends ChangeNotifier {
   bool get _demo => AppState.instance.profile == null;
   SupabaseClient get _client => Supabase.instance.client;
 
-  List<AppUser> get users => _demo ? Mock.users : [for (final p in _profiles) AppUser.fromProfile(p)];
+  /// Cuentas sin borrar.
+  List<AppUser> get users =>
+      _demo ? Mock.users : [for (final p in _profiles.where((p) => !p.deleted)) AppUser.fromProfile(p)];
+
+  /// Nombre para mostrar de un id de `perfil`. Incluye cuentas borradas,
+  /// porque sus proyectos y evidencias siguen guardando el id.
+  String nameOf(String? id) {
+    if (id == null || id.isEmpty) return '';
+    if (_demo) return Mock.users.where((u) => u.id == id).firstOrNull?.name ?? 'Usuario desconocido';
+    return _profiles.where((p) => p.id == id).firstOrNull?.name ??
+        (id == AppState.instance.profile?.id ? AppState.instance.userName : 'Usuario desconocido');
+  }
+
+  AppUser? byId(String? id) => users.where((u) => u.id == id).firstOrNull;
 
   /// Supervisores o técnicos a los que hoy se les puede asignar trabajo.
   List<AppUser> assignable(UserRole role) => users.where((u) => u.role == role && u.assignable).toList();
@@ -45,9 +58,7 @@ class UserDirectory extends ChangeNotifier {
   Future<void> start() async {
     final cached = (await SharedPreferences.getInstance()).getString(_cacheKey);
     if (cached != null) {
-      _profiles = [
-        for (final j in jsonDecode(cached) as List) Profile.fromJson(j as Map<String, dynamic>),
-      ];
+      _profiles = [for (final j in jsonDecode(cached) as List) Profile.fromJson(j as Map<String, dynamic>)];
       notifyListeners();
     }
     unawaited(refresh());
@@ -61,7 +72,6 @@ class UserDirectory extends ChangeNotifier {
       final rows = await _client
           .from('perfil')
           .select(_columns)
-          .isFilter('eliminado_en', null)
           .order('nombre')
           .timeout(_timeout);
       _profiles = [for (final r in rows) Profile.fromJson(r)];
@@ -85,18 +95,20 @@ class UserDirectory extends ChangeNotifier {
     required DateTime endsOn,
   }) async {
     try {
-      final res = await _client.functions.invoke(
-        'crear-usuario',
-        headers: await _authHeader(),
-        body: {
-          'email': email.trim().toLowerCase(),
-          'password': password,
-          'nombre': name.trim(),
-          'rol': role,
-          'inicio_vigencia': _date(startsOn),
-          'fin_vigencia': _date(endsOn),
-        },
-      ).timeout(_timeout);
+      final res = await _client.functions
+          .invoke(
+            'crear-usuario',
+            headers: await _authHeader(),
+            body: {
+              'email': email.trim().toLowerCase(),
+              'password': password,
+              'nombre': name.trim(),
+              'rol': role,
+              'inicio_vigencia': _date(startsOn),
+              'fin_vigencia': _date(endsOn),
+            },
+          )
+          .timeout(_timeout);
       final profile = Profile.fromJson((res.data as Map<String, dynamic>)['perfil'] as Map<String, dynamic>);
       _profiles = [..._profiles, profile]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       await _save();
@@ -114,7 +126,7 @@ class UserDirectory extends ChangeNotifier {
     required String role,
     required bool active,
     required DateTime startsOn,
-    required DateTime endsOn,
+    required DateTime? endsOn,
   }) async {
     final id = user.profile?.id;
     if (id == null) return;
@@ -125,7 +137,7 @@ class UserDirectory extends ChangeNotifier {
             'rol': role,
             'activo': active,
             'inicio_vigencia': _date(startsOn),
-            'fin_vigencia': _date(endsOn),
+            'fin_vigencia': endsOn == null ? null : _date(endsOn),
           })
           .eq('id', id)
           .select(_columns)
@@ -163,13 +175,14 @@ class UserDirectory extends ChangeNotifier {
   }
 
   static String _message(Object e) => switch (e) {
-        AuthFailure(:final message) => message,
-        FunctionException(:final details, :final status) => _functionMessage(details, status),
-        PostgrestException(:final message) => message,
-        AuthRetryableFetchException() || SocketException() || ClientException() || TimeoutException() => _offline,
-        AuthException(:final message) => message,
-        _ => '$e',
-      };
+    AuthFailure(:final message) => message,
+    FunctionsFetchException() => _offline,
+    FunctionException(:final details, :final status) => _functionMessage(details, status),
+    PostgrestException(:final message) => message,
+    AuthRetryableFetchException() || SocketException() || ClientException() || TimeoutException() => _offline,
+    AuthException(:final message) => message,
+    _ => '$e',
+  };
 
   /// La función responde `{error, detalles?}`.
   static String _functionMessage(dynamic details, int status) {

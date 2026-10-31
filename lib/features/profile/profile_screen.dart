@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/services/formatting.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/auth/auth_service.dart';
+import '../../data/auth/user_directory.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
 import '../../data/survey_store.dart';
@@ -194,7 +195,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     NavRow(
                       dense: true,
                       title: 'Usuarios y roles',
-                      subtitle: '${Mock.users.length} usuarios registrados',
+                      subtitle: '${UserDirectory.instance.users.length} usuarios registrados',
                       icon: Icons.group_rounded,
                       iconColor: AppColors.teal,
                       onTap: () => push(context, const UsersScreen()),
@@ -203,7 +204,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     NavRow(
                       dense: true,
                       title: 'Clientes',
-                      subtitle: '${Mock.clients.length} clientes',
+                      subtitle: '${SurveyStore.instance.clients.length} clientes',
                       icon: Icons.business_rounded,
                       iconColor: AppColors.blue,
                       onTap: () => push(context, const ClientsScreen()),

@@ -5,6 +5,7 @@ import '../../core/services/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
+import '../../data/auth/user_directory.dart';
 import '../../data/mock_data.dart';
 import '../../data/models.dart';
 import '../../data/survey/entities.dart';
@@ -13,6 +14,7 @@ import '../../data/survey_store.dart';
 import '../../main.dart';
 import '../../data/catalog.dart';
 import '../admin/catalog_screen.dart';
+import '../admin/clients_screen.dart';
 import '../shell/home_shell.dart';
 import '../visits/question_field.dart';
 import 'project_detail_screen.dart';
@@ -41,12 +43,13 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
   final _coordsText = TextEditingController();
   final _description = TextEditingController();
 
+  /// Ids de cliente, tipo, supervisor y técnicos.
   String? _client;
-  late String _type = _store.catalog(CatalogKind.projectTypes).firstOrNull?.name ?? '';
+  late String _type = _store.catalog(CatalogKind.projectTypes).firstOrNull?.id ?? '';
   DateTime? _date;
   bool _locating = false;
 
-  late String _supervisor = Mock.users.firstWhere((u) => u.role == UserRole.supervisor).name;
+  late String _supervisor = UserDirectory.instance.assignable(UserRole.supervisor).firstOrNull?.id ?? '';
   final _techs = <String>{};
   late TemplateDef? _template = _store.activeTemplates.firstOrNull;
   final _docs = <PickedDocument>[];
@@ -61,8 +64,20 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
 
   Future<void> _addType() async {
     final t = await showCatalogItemSheet(context, CatalogKind.projectTypes);
-    if (t != null && mounted) setState(() => _type = t.name);
+    if (t != null && mounted) setState(() => _type = t.id);
   }
+
+  Future<void> _addClient() async {
+    final c = await showClientSheet(context);
+    if (c != null && mounted) setState(() => _client = c.id);
+  }
+
+  /// Llena el paso de ubicación con un sitio que el cliente ya tiene.
+  void _useSite(SurveySite s) => setState(() {
+        _site.text = s.name;
+        _address.text = s.address;
+        _coordsText.text = s.coords == null ? '' : '${s.coords!.lat}, ${s.coords!.lng}';
+      });
 
   String? get _stepError => switch (_step) {
         0 => _code.text.trim().isEmpty
@@ -79,7 +94,11 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
             : _coordsText.text.trim().isNotEmpty && GeoPoint.tryParse(_coordsText.text) == null
                 ? 'Coordenadas inválidas: usa "latitud, longitud"'
                 : null,
-        2 => _techs.isEmpty ? 'Asigna al menos un técnico' : null,
+        2 => _supervisor.isEmpty
+            ? 'Elige el supervisor'
+            : _techs.isEmpty
+                ? 'Asigna al menos un técnico'
+                : null,
         _ => _template == null ? 'Elige una plantilla' : null,
       };
 
@@ -99,22 +118,22 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
       final project = await _store.createProject(
         code: _code.text,
         name: _name.text,
-        client: _client!,
+        clientId: _client!,
         site: _site.text,
         address: _address.text,
         coords: GeoPoint.tryParse(_coordsText.text),
         scheduledAt: _date,
-        supervisor: _supervisor,
-        technicians: _techs.toList(),
+        supervisorId: _supervisor,
+        technicianIds: _techs.toList(),
         template: _template!,
-        type: _type,
+        typeId: _type,
         description: _description.text,
         docs: _docs,
       );
       if (!mounted) return;
       Navigator.pop(context);
       push(context, ProjectDetailScreen(project: project));
-      showAppSnack(context, 'Proyecto creado · visita asignada a ${_techs.first}',
+      showAppSnack(context, 'Proyecto creado · visita asignada a ${UserDirectory.instance.nameOf(_techs.first)}',
           icon: Icons.check_circle_rounded, color: AppColors.success);
     } catch (e) {
       if (mounted) {
@@ -215,8 +234,10 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final c in Mock.clients)
-              ChoicePill(label: c.name, selected: _client == c.name, onTap: () => setState(() => _client = c.name)),
+            for (final c in _store.clients)
+              ChoicePill(label: c.name, selected: _client == c.id, onTap: () => setState(() => _client = c.id)),
+            // Admin y supervisores pueden dar de alta al cliente que falte.
+            ChoicePill(label: '+ Nuevo cliente', selected: false, onTap: _addClient),
           ],
         ),
         const SizedBox(height: 18),
@@ -226,7 +247,7 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
           runSpacing: 8,
           children: [
             for (final t in _store.catalog(CatalogKind.projectTypes))
-              ChoicePill(label: t.name, selected: _type == t.name, onTap: () => setState(() => _type = t.name)),
+              ChoicePill(label: t.name, selected: _type == t.id, onTap: () => setState(() => _type = t.id)),
             // El admin puede crear el tipo que falte sin salir del alta.
             if (AppState.instance.role == UserRole.admin)
               ChoicePill(label: '+ Nuevo tipo', selected: false, onTap: _addType),
@@ -242,6 +263,21 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
       ]);
 
   Widget _location() => _wrap('loc', [
+        if (_client != null && _store.sitesOf(_client!).isNotEmpty) ...[
+          const FieldLabel('Sitios del cliente', hint: 'Toca uno para usarlo'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final s in _store.sitesOf(_client!))
+                ChoicePill(
+                    label: s.name,
+                    selected: _site.text.trim().toLowerCase() == s.name.toLowerCase(),
+                    onTap: () => _useSite(s)),
+            ],
+          ),
+          const SizedBox(height: 18),
+        ],
         const FieldLabel('Nombre del sitio', required: true),
         TextField(controller: _site, decoration: const InputDecoration(hintText: 'Ej. Nave DSV · Parque Colonial')),
         const SizedBox(height: 18),
@@ -301,8 +337,8 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
       ]);
 
   Widget _team() {
-    final supervisors = Mock.users.where((u) => u.role == UserRole.supervisor && u.active).toList();
-    final techs = Mock.users.where((u) => u.role == UserRole.tecnico && u.active).toList();
+    final supervisors = UserDirectory.instance.assignable(UserRole.supervisor);
+    final techs = UserDirectory.instance.assignable(UserRole.tecnico);
     return _wrap('team', [
       const FieldLabel('Supervisor', required: true),
       Wrap(
@@ -310,7 +346,7 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
         runSpacing: 8,
         children: [
           for (final s in supervisors)
-            ChoicePill(label: s.name, selected: _supervisor == s.name, onTap: () => setState(() => _supervisor = s.name)),
+            ChoicePill(label: s.name, selected: _supervisor == s.id, onTap: () => setState(() => _supervisor = s.id)),
         ],
       ),
       const SizedBox(height: 20),
@@ -321,11 +357,11 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
           child: GlassCard(
             color: AppColors.surfaceAlt,
             padding: const EdgeInsets.all(11),
-            borderColor: _techs.contains(u.name) ? AppColors.accent.withValues(alpha: 0.4) : null,
-            onTap: () => setState(() => _techs.contains(u.name) ? _techs.remove(u.name) : _techs.add(u.name)),
+            borderColor: _techs.contains(u.id) ? AppColors.accent.withValues(alpha: 0.4) : null,
+            onTap: () => setState(() => _techs.contains(u.id) ? _techs.remove(u.id) : _techs.add(u.id)),
             child: Row(
               children: [
-                InitialsAvatar(u.initials, size: 34, color: _techs.contains(u.name) ? AppColors.accent : AppColors.blue),
+                InitialsAvatar(u.initials, size: 34, color: _techs.contains(u.id) ? AppColors.accent : AppColors.blue),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -337,9 +373,9 @@ class _NewProjectScreenState extends State<NewProjectScreen> {
                   ),
                 ),
                 Icon(
-                  _techs.contains(u.name) ? Icons.check_circle_rounded : Icons.circle_outlined,
+                  _techs.contains(u.id) ? Icons.check_circle_rounded : Icons.circle_outlined,
                   size: 20,
-                  color: _techs.contains(u.name) ? AppColors.accent : AppColors.textMuted,
+                  color: _techs.contains(u.id) ? AppColors.accent : AppColors.textMuted,
                 ),
               ],
             ),

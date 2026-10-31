@@ -19,10 +19,9 @@ void main() {
     final store = await initTestStore();
     final running = await seedProject(store, start: true); // en curso, Juan Pérez
     final waiting = await seedProject(store);
-    waiting
-      ..client = 'SPRINGS'
-      ..name = 'Springs Window Fashions';
-    await store.createVisit(waiting, technician: 'Diego Salas', motive: 'Mediciones adicionales');
+    await moveToClient(store, waiting, 'SPRINGS');
+    waiting.name = 'Springs Window Fashions';
+    await store.createVisit(waiting, technicianId: uid('Diego Salas'), motiveId: motiveId(store, 'Mediciones adicionales'));
 
     await pumpOnPhone(tester, const HomeShell());
     HomeNav.openVisits();
@@ -104,8 +103,8 @@ void main() {
     waiting.name = 'Springs Window Fashions';
     final other = await seedProject(store);
     other.name = 'Visita de otro técnico';
-    await store.createVisit(other, technician: 'Diego Salas', motive: 'Mediciones adicionales');
-    store.visitsOf(other.id).firstWhere((v) => v.technician == 'Juan Pérez').technician = 'Ana Torres';
+    await store.createVisit(other, technicianId: uid('Diego Salas'), motiveId: motiveId(store, 'Mediciones adicionales'));
+    store.visitsOf(other.id).firstWhere((v) => v.technician == 'Juan Pérez').technicianId = uid('Ana Torres');
     AppState.instance.setRole(UserRole.tecnico); // Juan Pérez
 
     await pumpOnPhone(tester, const HomeShell());
@@ -134,8 +133,8 @@ void main() {
     scheduled.name = 'Programada antes';
     final diego = await seedProject(store);
     diego.name = 'Proyecto de Diego';
-    await store.createVisit(diego, technician: 'Diego Salas', motive: 'Mediciones adicionales');
-    store.visitsOf(diego.id).firstWhere((v) => v.technician == 'Juan Pérez').technician = 'Diego Salas';
+    await store.createVisit(diego, technicianId: uid('Diego Salas'), motiveId: motiveId(store, 'Mediciones adicionales'));
+    store.visitsOf(diego.id).firstWhere((v) => v.technician == 'Juan Pérez').technicianId = uid('Diego Salas');
     final reopened = await seedProject(store, start: true);
     reopened.name = 'Reabierta';
     final rv = store.latestVisit(reopened.id)!;
