@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
@@ -11,6 +12,7 @@ import '../projects/projects_screen.dart';
 import '../profile/profile_screen.dart';
 import '../visits/visits_tab.dart';
 import '../../data/survey_store.dart';
+import '../../data/sync/sync_service.dart';
 import 'approvals_sheet.dart';
 import 'create_sheet.dart';
 import 'quick_capture_sheet.dart';
@@ -364,7 +366,8 @@ class HeaderIconButton extends StatelessWidget {
   }
 }
 
-/// Indicador de conexión / sincronización usado en varias pantallas.
+/// Indicador de conexión / sincronización usado en varias pantallas. Tocarlo
+/// pausa o reanuda la sincronización.
 class ConnectionChip extends StatelessWidget {
   const ConnectionChip({super.key, this.onTap});
   final VoidCallback? onTap;
@@ -372,42 +375,40 @@ class ConnectionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppState.instance;
-    final offline = s.offlineMode;
-    return GestureDetector(
-      onTap: onTap ??
-          () {
-            s.toggleOffline();
-            (context as Element).markNeedsBuild();
-          },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-        decoration: BoxDecoration(
-          color: (offline ? AppColors.warning : AppColors.success).withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: (offline ? AppColors.warning : AppColors.success).withValues(alpha: 0.3),
+    final sync = SyncService.instance;
+    return ListenableBuilder(
+      listenable: Listenable.merge([s, sync]),
+      builder: (context, _) {
+        final (color, icon, label) = switch (s) {
+          _ when s.offlineMode => (AppColors.warning, Icons.pause_circle_rounded, 'Pausada'),
+          _ when !sync.online => (AppColors.warning, Icons.cloud_off_rounded, 'Offline'),
+          _ when sync.running => (AppColors.blue, Icons.cloud_sync_rounded, 'Sincronizando'),
+          _ => (AppColors.success, Icons.cloud_done_rounded, 'En línea'),
+        };
+        return GestureDetector(
+          onTap: onTap ??
+              () {
+                s.toggleOffline();
+                if (!s.offlineMode) unawaited(sync.sync());
+              },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: color.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 13, color: color),
+                const SizedBox(width: 6),
+                Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: color)),
+              ],
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              offline ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
-              size: 13,
-              color: offline ? AppColors.warning : AppColors.success,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              offline ? 'Offline' : 'En línea',
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: offline ? AppColors.warning : AppColors.success,
-              ),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 }

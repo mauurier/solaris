@@ -11,6 +11,7 @@ import '../../data/survey/visit_engine.dart';
 import '../../data/survey_store.dart';
 import '../../main.dart';
 import '../shell/home_shell.dart';
+import 'review_sheet.dart';
 import 'section_screen.dart';
 
 /// Validación antes de cerrar: los pendientes obligatorios bloquean, los
@@ -43,6 +44,8 @@ class _ValidationScreenState extends State<ValidationScreen> {
         final blocking = pend.where((p) => p.kind == PendingKind.blocking).toList();
         final optional = pend.where((p) => p.kind == PendingKind.optional).toList();
         final justified = pend.where((p) => p.kind == PendingKind.justified).toList();
+        final corrections = _store.pendingCorrections(widget.visit.id);
+        final locked = blocking.isNotEmpty || corrections.isNotEmpty;
         final pct = (engine.overall.value * 100).round();
 
         return DetailScaffold(
@@ -51,12 +54,14 @@ class _ValidationScreenState extends State<ValidationScreen> {
           bottomBar: AppButton(
             _closing
                 ? 'Cerrando…'
-                : blocking.isEmpty
-                    ? 'Finalizar visita'
-                    : '${blocking.length} pendiente${blocking.length == 1 ? '' : 's'} obligatorio${blocking.length == 1 ? '' : 's'}',
-            icon: blocking.isEmpty ? Icons.flag_rounded : Icons.lock_rounded,
+                : blocking.isNotEmpty
+                    ? '${blocking.length} pendiente${blocking.length == 1 ? '' : 's'} obligatorio${blocking.length == 1 ? '' : 's'}'
+                    : corrections.isNotEmpty
+                        ? '${corrections.length} correcci${corrections.length == 1 ? 'ón' : 'ones'} sin atender'
+                        : 'Finalizar visita',
+            icon: locked ? Icons.lock_rounded : Icons.flag_rounded,
             expand: true,
-            onPressed: blocking.isEmpty && !_closing ? _finish : null,
+            onPressed: !locked && !_closing ? _finish : null,
           ),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
@@ -68,7 +73,7 @@ class _ValidationScreenState extends State<ValidationScreen> {
                       value: engine.overall.value,
                       size: 70,
                       stroke: 6,
-                      color: blocking.isEmpty ? AppColors.success : AppColors.accent,
+                      color: locked ? AppColors.accent : AppColors.success,
                       center: Text('$pct%', style: T.h3),
                     ),
                     const SizedBox(width: 16),
@@ -76,7 +81,7 @@ class _ValidationScreenState extends State<ValidationScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(blocking.isEmpty ? 'Listo para cerrar' : 'Aún no se puede cerrar', style: T.h2),
+                          Text(locked ? 'Aún no se puede cerrar' : 'Listo para cerrar', style: T.h2),
                           const SizedBox(height: 6),
                           Text(
                             '${blocking.length} obligatorios · ${optional.length} opcionales · ${justified.length} justificados',
@@ -88,6 +93,10 @@ class _ValidationScreenState extends State<ValidationScreen> {
                   ],
                 ),
               ),
+              if (corrections.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                PendingCorrectionsCard(visit: widget.visit, editable: true),
+              ],
               const SizedBox(height: 14),
               if (blocking.isNotEmpty && !_isSupervisor)
                 const InfoBanner(
@@ -116,7 +125,7 @@ class _ValidationScreenState extends State<ValidationScreen> {
                 ),
                 if (_showOptional) ...optional.map((p) => _row(p, AppColors.textMuted)),
               ],
-              if (pend.isEmpty) ...[
+              if (pend.isEmpty && corrections.isEmpty) ...[
                 const SizedBox(height: 30),
                 const EmptyState(
                   icon: Icons.verified_rounded,

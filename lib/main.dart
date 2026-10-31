@@ -91,7 +91,7 @@ class _StartupState extends State<_Startup> {
       if (profile == null) return const LoginScreen();
       AppState.instance.signIn(profile);
       unawaited(UserDirectory.instance.start());
-      unawaited(SyncService.instance.sync());
+      SyncService.instance.start();
       return const HomeShell();
     } on AuthFailure catch (e) {
       return LoginScreen(message: e.message);

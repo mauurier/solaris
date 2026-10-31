@@ -22,7 +22,10 @@ class SqlitePersistence implements Persistence {
   ///    que quedaba pendiente de subir, para que baje la del servidor.
   /// 6: columna `base`: la fila como estaba la última vez que coincidió con
   ///    el servidor. La subida compara contra ella.
-  static const _version = 6;
+  /// 7: se quitó el modo demo. Lo que se capturó en él lleva ids de personas
+  ///    de ejemplo (`demo-…`) que no existen en el servidor, y se borra.
+  /// 8: tablas `reviews` y `corrections` (revisión del supervisor).
+  static const _version = 8;
   static const _builtInTemplate = '015c2871-6002-4d95-94ca-8e95d12e8b35';
 
   static Future<void> _createTable(DatabaseExecutor db, String t) async {
@@ -66,12 +69,17 @@ class SqlitePersistence implements Persistence {
             if (from == 4) {
               await db.delete(Tables.templates, where: 'id = ?', whereArgs: [_builtInTemplate]);
             }
+            final existing = {
+              for (final r in await db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'")) r['name'],
+            };
             if (from < 6) {
-              final existing = {
-                for (final r in await db.rawQuery("SELECT name FROM sqlite_master WHERE type = 'table'")) r['name'],
-              };
               for (final t in Tables.all.where(existing.contains)) {
                 await db.execute('ALTER TABLE $t ADD COLUMN base TEXT');
+              }
+            }
+            if (from < 7) {
+              for (final t in Tables.all.where(existing.contains)) {
+                await db.delete(t, where: 'data LIKE ?', whereArgs: ['%"demo-%']);
               }
             }
           }

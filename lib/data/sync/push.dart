@@ -19,7 +19,7 @@ enum _Result {
 
 /// Sube lo que cambió en el teléfono, en el orden de las llaves foráneas:
 /// catálogos y plantillas, cliente, sitio, proyecto con sus técnicos, visita,
-/// respuestas, documentos y evidencias. De estos dos últimos primero sube el
+/// revisiones y correcciones, respuestas, documentos y evidencias. De estos dos últimos primero sube el
 /// archivo a Storage y después la fila con `subido_en`: una fila en el
 /// servidor siempre tiene su archivo. Al final, las visitas terminadas que ya
 /// subieron todo pasan a revisión.
@@ -45,15 +45,15 @@ class SyncPush {
   /// estaban pendientes se saltó sus cambios. En `respuesta` son ids de visita.
   final refetch = <String, Set<String>>{};
 
-  /// Lo que el servidor rechazó. Esas filas siguen pendientes.
-  final failures = <String>[];
+  /// Lo que el servidor rechazó, por fila (`tabla local/id`). Esas filas
+  /// siguen pendientes.
+  final failures = <String, String>{};
 
-  /// Ids que no existen en el servidor (modo demo, o se rechazó su alta):
-  /// lo que cuelga de ellos tampoco se sube.
+  void _fail(String table, String id, RemoteRejected e) => failures['$table/$id'] = e.message;
+
+  /// Ids que no existen en el servidor (se rechazó su alta): lo que cuelga
+  /// de ellos tampoco se sube.
   final _missing = <String>{};
-
-  /// Ids de `perfil` del modo demo (`AppState.setRole`); no existen arriba.
-  static const _demoPrefix = 'demo-';
 
   static const _answerKey = 'id_visita,clave_grupo,numero_repeticion,clave_pregunta';
 
@@ -70,6 +70,8 @@ class SyncPush {
     await _table(RemoteTable.sites, parent: 'clientId');
     await _table(RemoteTable.projects, parent: 'siteId');
     await _table(RemoteTable.visits, parent: 'projectId');
+    await _table(RemoteTable.reviews, parent: 'visitId');
+    await _table(RemoteTable.corrections, parent: 'reviewId');
     await _answers();
     await _table(RemoteTable.documents, parent: 'projectId');
     await _table(RemoteTable.evidences, parent: 'visitId');
@@ -91,7 +93,7 @@ class SyncPush {
       try {
         results.add((row, await _row(t, row, server[row.id])));
       } on RemoteRejected catch (e) {
-        failures.add(e.message);
+        _fail(t.local, row.id, e);
         if (server[row.id] == null) _missing.add(row.id);
       }
     }
@@ -111,7 +113,7 @@ class SyncPush {
       await remote.insert(t, {'id': row.id, ...local, ...await file()});
       return _Result.written;
     }
-    final serverNewer = _serverNewer(server, row.editedAt);
+    final serverNewer = _serverNewer(server, row.editedAt, t.timestamp);
     final base = row.base == null ? null : RemoteRows.toDb(t.local, row.base!);
 
     if (RemoteRows.deleted(server)) {
@@ -221,7 +223,7 @@ class SyncPush {
           }
         }
       } on RemoteRejected catch (e) {
-        failures.add(e.message);
+        _fail(Tables.projects, row.id, e);
         results.removeWhere((r) => r.$1 == row);
       }
     }
@@ -248,7 +250,9 @@ class SyncPush {
         final upserts = [for (final (_, (write, _)) in writes) ?write];
         if (upserts.isNotEmpty) await remote.upsert(t, upserts, onConflict: _answerKey);
       } on RemoteRejected catch (e) {
-        failures.add(e.message);
+        for (final row in group) {
+          _fail(Tables.answers, row.id, e);
+        }
         continue;
       }
       for (final (row, (_, result)) in writes) {
@@ -282,12 +286,12 @@ class SyncPush {
 
   // ---------------------------------------------------------------- ayuda
 
-  /// Pendientes que se pueden subir. Lo del modo demo o lo que cuelga de algo
-  /// que no está en el servidor se queda en el teléfono.
+  /// Pendientes que se pueden subir. Lo que cuelga de algo que no está en el
+  /// servidor se queda en el teléfono.
   Future<List<PendingRow>> _pending(String table, String? Function(PendingRow) parentOf) async {
     final out = <PendingRow>[];
     for (final r in await store.db.pending(table)) {
-      if (_hasDemoIds(r.data) || _missing.contains(parentOf(r))) {
+      if (_missing.contains(parentOf(r))) {
         _missing.add(r.id);
       } else {
         out.add(r);
@@ -295,14 +299,6 @@ class SyncPush {
     }
     return out;
   }
-
-  static bool _hasDemoIds(Map<String, Object?> j) => [
-        j['supervisorId'],
-        j['technicianId'],
-        j['userId'],
-        j['addedById'],
-        ...?(j['technicianIds'] as List?),
-      ].any((v) => v is String && v.startsWith(_demoPrefix));
 
   Future<void> _done(RemoteTable t, PendingRow row, _Result result, {required String refetchId}) async {
     await store.db.markSynced(t.local, row.id, editedAt: row.editedAt, base: row.deleted ? null : row.data);
@@ -334,8 +330,8 @@ class SyncPush {
       };
 
   /// El servidor cambió la fila después de que el teléfono la editó.
-  static bool _serverNewer(RemoteRow server, String editedAt) =>
-      DateTime.parse('${server['actualizado_en']}').isAfter(DateTime.parse(editedAt));
+  static bool _serverNewer(RemoteRow server, String editedAt, [String column = 'actualizado_en']) =>
+      DateTime.parse('${server[column]}').isAfter(DateTime.parse(editedAt));
 
   static String _now() => DateTime.now().toUtc().toIso8601String();
 }

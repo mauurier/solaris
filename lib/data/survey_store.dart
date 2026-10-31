@@ -51,7 +51,20 @@ class SurveyStore extends ChangeNotifier {
     final files = FileStore(Directory(p.join(dir.path, 'solaris_media')));
     // Los archivos de los datos de prueba borrados con la base anterior.
     if (db.wiped) await files.deleteDir('media');
-    return init(db, files);
+    final store = await init(db, files);
+    await store._deleteOrphanMedia();
+    return store;
+  }
+
+  /// Carpetas de `media` de proyectos que ya no están en el teléfono (p. ej.
+  /// lo que se capturó en el modo demo, que ya no existe).
+  Future<void> _deleteOrphanMedia() async {
+    final media = Directory(p.join(files.root.path, 'media'));
+    if (!media.existsSync()) return;
+    final ids = {for (final pr in projects) pr.id};
+    for (final dir in media.listSync().whereType<Directory>()) {
+      if (!ids.contains(p.basename(dir.path))) await dir.delete(recursive: true);
+    }
   }
 
   static Future<SurveyStore> init(Persistence db, FileStore files) async {
@@ -73,6 +86,8 @@ class SurveyStore extends ChangeNotifier {
   final visits = <FieldVisit>[];
   final _answers = <String, Map<String, String>>{};
   final evidences = <Evidence>[];
+  final reviews = <VisitReview>[];
+  final corrections = <Correction>[];
 
   /// Valores con los que arranca cada catálogo en una instalación nueva. Los
   /// ids son los de la semilla de la migración en Supabase.
@@ -116,6 +131,8 @@ class SurveyStore extends ChangeNotifier {
     documents.addAll((await db.load(Tables.documents)).map(ProjectDocument.fromJson));
     visits.addAll((await db.load(Tables.visits)).map(FieldVisit.fromJson));
     evidences.addAll((await db.load(Tables.evidences)).map(Evidence.fromJson));
+    reviews.addAll((await db.load(Tables.reviews)).map(VisitReview.fromJson));
+    corrections.addAll((await db.load(Tables.corrections)).map(Correction.fromJson));
     for (final row in await db.load(Tables.answers)) {
       _answers.putIfAbsent(row['visitId'] as String, () => {})[row['key'] as String] = row['value'] as String;
     }
@@ -332,6 +349,9 @@ class SurveyStore extends ChangeNotifier {
     for (final v in visitsOf(proj.id)) {
       await db.removeByParent(Tables.answers, v.id);
       await db.removeByParent(Tables.evidences, v.id);
+      // Las revisiones no se borran en el servidor: quedan con la visita borrada.
+      await db.forgetByParent(Tables.reviews, v.id);
+      await db.forgetByParent(Tables.corrections, v.id);
       _answers.remove(v.id);
     }
     await db.removeByParent(Tables.visits, proj.id);
@@ -340,6 +360,9 @@ class SurveyStore extends ChangeNotifier {
     visits.removeWhere((v) => v.projectId == proj.id);
     documents.removeWhere((d) => d.projectId == proj.id);
     evidences.removeWhere((e) => e.projectId == proj.id);
+    final gone = {for (final v in visits.where((v) => v.projectId == proj.id)) v.id};
+    reviews.removeWhere((r) => gone.contains(r.visitId));
+    corrections.removeWhere((c) => gone.contains(c.visitId));
     projects.remove(proj);
     await files.deleteDir(p.join('media', proj.id));
     notifyListeners();
@@ -523,8 +546,9 @@ class SurveyStore extends ChangeNotifier {
 
   /// El supervisor aprueba una visita finalizada. El proyecto queda aprobado
   /// cuando todas sus visitas lo están.
-  Future<void> approveVisit(FieldVisit v) async {
+  Future<void> approveVisit(FieldVisit v, {String notes = ''}) async {
     if (!v.finished) throw StateError('Sólo se aprueba una visita finalizada');
+    await _addReview(v, ReviewDecision.approved, notes);
     v.status = ProjectStatus.aprobado;
     final proj = project(v.projectId);
     if (proj != null && visitsOf(proj.id).every((x) => x.status == ProjectStatus.aprobado)) {
@@ -534,13 +558,57 @@ class SurveyStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> reopenVisit(FieldVisit v) async {
+  /// El supervisor devuelve la visita al técnico con lo que debe corregir:
+  /// queda abierta otra vez y no se puede cerrar hasta atender todo.
+  Future<void> requestCorrections(FieldVisit v, {required List<String> items, String notes = ''}) async {
+    final list = [for (final i in items) if (i.trim().isNotEmpty) i.trim()];
+    if (list.isEmpty) throw ArgumentError('Escribe al menos una corrección');
+    final review = await _addReview(v, ReviewDecision.corrections, notes);
+    for (final text in list) {
+      final c = Correction(
+          id: _uuid.v4(), reviewId: review.id, visitId: v.id, description: text, createdAt: DateTime.now());
+      corrections.add(c);
+      await db.put(Tables.corrections, c.id, c.toJson(), parent: v.id);
+    }
     v.endedAt = null;
     v.endPoint = null;
-    v.status = ProjectStatus.enCaptura;
+    v.status = ProjectStatus.conCorrecciones;
     final proj = project(v.projectId);
     if (proj != null) proj.status = ProjectStatus.conCorrecciones;
     await _saveVisit(v);
+    notifyListeners();
+  }
+
+  Future<VisitReview> _addReview(FieldVisit v, ReviewDecision decision, String notes) async {
+    final r = VisitReview(
+      id: _uuid.v4(),
+      visitId: v.id,
+      supervisorId: _userId,
+      decision: decision,
+      notes: notes.trim(),
+      createdAt: DateTime.now(),
+    );
+    reviews.add(r);
+    await db.put(Tables.reviews, r.id, r.toJson(), parent: v.id);
+    return r;
+  }
+
+  /// Revisiones de la visita, la más reciente primero.
+  List<VisitReview> reviewsOf(String visitId) =>
+      reviews.where((r) => r.visitId == visitId).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  List<Correction> correctionsOf(String reviewId) =>
+      corrections.where((c) => c.reviewId == reviewId).toList()..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+  /// Correcciones sin atender: la visita no se puede cerrar mientras haya.
+  List<Correction> pendingCorrections(String visitId) =>
+      corrections.where((c) => c.visitId == visitId && !c.attended).toList()
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+  Future<void> setCorrectionAttended(Correction c, bool attended) async {
+    c.attendedAt = attended ? DateTime.now() : null;
+    await db.put(Tables.corrections, c.id, c.toJson(), parent: c.visitId);
+    await _touch(visit(c.visitId)?.projectId ?? '');
     notifyListeners();
   }
 
@@ -685,6 +753,15 @@ class SurveyStore extends ChangeNotifier {
 
   // ----------------------------------------------------------- sincronización
 
+  /// Filas de todas las tablas con cambios que falta subir.
+  Future<int> pendingCount() async {
+    var n = 0;
+    for (final t in Tables.all) {
+      n += (await db.pending(t)).length;
+    }
+    return n;
+  }
+
   /// Ids con cambios en el teléfono que falta subir.
   Future<Set<String>> pendingIds(String table) async => {for (final r in await db.pending(table)) r.id};
 
@@ -698,6 +775,8 @@ class SurveyStore extends ChangeNotifier {
       (Tables.documents, {projectId}),
       (Tables.answers, visitIds),
       (Tables.evidences, visitIds),
+      (Tables.reviews, visitIds),
+      (Tables.corrections, visitIds),
     ]) {
       if ((await db.pending(table)).any((r) => parents.contains(r.parent))) return true;
     }
@@ -763,7 +842,8 @@ class SurveyStore extends ChangeNotifier {
         projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       case Tables.visits:
         final pendingChildren = {
-          for (final t in [Tables.answers, Tables.evidences]) ...(await db.pending(t)).map((r) => r.parent),
+          for (final t in [Tables.answers, Tables.evidences, Tables.reviews, Tables.corrections])
+            ...(await db.pending(t)).map((r) => r.parent),
         };
         for (final r in fresh) {
           final v = FieldVisit.fromJson(r);
@@ -820,6 +900,23 @@ class SurveyStore extends ChangeNotifier {
           }
           await db.forget(table, id);
         }
+      case Tables.reviews:
+        for (final r in fresh) {
+          final review = VisitReview.fromJson(r);
+          _replace(reviews, review, (x) => x.id);
+          await db.put(table, review.id, r, parent: review.visitId, pending: false);
+        }
+      case Tables.corrections:
+        for (final r in fresh) {
+          final c = Correction.fromJson(r);
+          final old = corrections.where((x) => x.id == c.id).firstOrNull;
+          old == null ? corrections.add(c) : old.attendedAt = c.attendedAt;
+          await db.put(table, c.id, r, parent: c.visitId, pending: false);
+        }
+        for (final id in gone) {
+          corrections.removeWhere((c) => c.id == id);
+          await db.forget(table, id);
+        }
       default:
         throw ArgumentError('Tabla sin sincronización: $table');
     }
@@ -844,10 +941,13 @@ class SurveyStore extends ChangeNotifier {
   }
 
   Future<void> _forgetVisit(String id) async {
-    await db.forgetByParent(Tables.answers, id);
-    await db.forgetByParent(Tables.evidences, id);
+    for (final t in [Tables.answers, Tables.evidences, Tables.reviews, Tables.corrections]) {
+      await db.forgetByParent(t, id);
+    }
     await db.forget(Tables.visits, id);
     _answers.remove(id);
+    reviews.removeWhere((r) => r.visitId == id);
+    corrections.removeWhere((c) => c.visitId == id);
     for (final e in evidences.where((e) => e.visitId == id).toList()) {
       evidences.remove(e);
       await files.delete(e.path);
@@ -877,6 +977,24 @@ class SurveyStore extends ChangeNotifier {
         projectDocCategories: docCategoriesOf(v.projectId),
         justifications: v.justifications,
       );
+
+  /// Resumen del Perfil: levantamientos terminados, proyectos activos y
+  /// duración promedio de esas visitas. El técnico cuenta las suyas; admin y
+  /// supervisor, las de los proyectos que ven.
+  ({int done, int active, Duration? average}) statsFor(UserRole role, String userId) {
+    final mine = projectsFor(role, userId);
+    final ids = {for (final pr in mine) pr.id};
+    final done = visits
+        .where((v) => v.finished && ids.contains(v.projectId))
+        .where((v) => role != UserRole.tecnico || v.technicianId == userId)
+        .toList();
+    final total = done.fold(Duration.zero, (sum, v) => sum + v.endedAt!.difference(v.startedAt!));
+    return (
+      done: done.length,
+      active: mine.where((pr) => pr.status != ProjectStatus.aprobado && pr.status != ProjectStatus.cerrado).length,
+      average: done.isEmpty ? null : total ~/ done.length,
+    );
+  }
 
   /// Avance del proyecto = avance de su visita más reciente.
   double progressOf(SurveyProject proj) {

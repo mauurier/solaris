@@ -395,6 +395,90 @@ extension FieldVisitState on FieldVisit {
               : VisitState.finalizada;
 }
 
+enum ReviewDecision { approved, corrections }
+
+/// Decisión del supervisor sobre una visita terminada (tabla `revision`). No
+/// se edita: cada vez que revisa queda un registro nuevo.
+class VisitReview {
+  VisitReview({
+    required this.id,
+    required this.visitId,
+    required this.supervisorId,
+    required this.decision,
+    required this.createdAt,
+    this.notes = '',
+  });
+
+  final String id;
+  final String visitId;
+
+  /// Id de `perfil` de quien revisó.
+  final String? supervisorId;
+  String get supervisor => _userName(supervisorId);
+  final ReviewDecision decision;
+  final String notes;
+  final DateTime createdAt;
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'visitId': visitId,
+        'supervisorId': supervisorId,
+        'decision': decision.name,
+        'notes': notes,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  static VisitReview fromJson(Map<String, Object?> j) => VisitReview(
+        id: j['id'] as String,
+        visitId: j['visitId'] as String,
+        supervisorId: j['supervisorId'] as String?,
+        decision: ReviewDecision.values.byName(j['decision'] as String),
+        notes: j['notes'] as String? ?? '',
+        createdAt: DateTime.parse(j['createdAt'] as String),
+      );
+}
+
+/// Algo que el supervisor pidió corregir en una revisión (tabla
+/// `correccion`). El técnico la marca como atendida.
+class Correction {
+  Correction({
+    required this.id,
+    required this.reviewId,
+    required this.visitId,
+    required this.description,
+    required this.createdAt,
+    this.attendedAt,
+  });
+
+  final String id;
+  final String reviewId;
+
+  /// Visita de su revisión; en la base sólo se llega por la revisión.
+  final String visitId;
+  final String description;
+  final DateTime createdAt;
+  DateTime? attendedAt;
+  bool get attended => attendedAt != null;
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'reviewId': reviewId,
+        'visitId': visitId,
+        'description': description,
+        'createdAt': createdAt.toIso8601String(),
+        'attendedAt': attendedAt?.toIso8601String(),
+      };
+
+  static Correction fromJson(Map<String, Object?> j) => Correction(
+        id: j['id'] as String,
+        reviewId: j['reviewId'] as String,
+        visitId: j['visitId'] as String,
+        description: j['description'] as String,
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        attendedAt: j['attendedAt'] == null ? null : DateTime.parse(j['attendedAt'] as String),
+      );
+}
+
 enum EvidenceKind { photo, video, document, signature }
 
 /// Archivo capturado durante una visita y ligado a una pregunta de la plantilla.

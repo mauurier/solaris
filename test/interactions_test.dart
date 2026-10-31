@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/data/survey_store.dart';
 import 'package:proyecto_app/features/admin/template_editor_screen.dart';
-import 'package:proyecto_app/features/measurements/measurement_form_screen.dart';
 import 'package:proyecto_app/features/projects/new_project_screen.dart';
 import 'package:proyecto_app/features/projects/project_detail_screen.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
-import 'package:proyecto_app/features/stats/stats_screen.dart';
 import 'package:proyecto_app/features/visits/section_screen.dart';
 import 'package:proyecto_app/features/visits/validation_screen.dart';
 import 'package:proyecto_app/features/visits/visit_screen.dart';
@@ -21,26 +18,26 @@ void main() {
   late SurveyStore store;
 
   setUp(() async {
-    AppState.instance.setRole(UserRole.tecnico);
+    signInAs(UserRole.tecnico);
     store = await initTestStore();
   });
 
   testWidgets('El panel se adapta a cada rol', (tester) async {
     await seedProject(store, start: true);
     for (final role in UserRole.values) {
-      AppState.instance.setRole(role);
+      signInAs(role);
       await pumpOnPhone(tester, const HomeShell());
       expectNoRenderErrors(tester);
       expect(find.textContaining('Hola,'), findsOneWidget);
     }
-    AppState.instance.setRole(UserRole.tecnico);
+    signInAs(UserRole.tecnico);
     await pumpOnPhone(tester, const HomeShell());
     expect(find.text('VISITA EN CURSO'), findsOneWidget);
   });
 
   testWidgets('El alta de proyecto valida cada paso y crea la visita', (tester) async {
     await store.addClient('TRUPER');
-    AppState.instance.setRole(UserRole.supervisor);
+    signInAs(UserRole.supervisor);
     await pumpPushed(tester, const NewProjectScreen());
 
     await tester.tap(find.text('Continuar'));
@@ -147,7 +144,7 @@ void main() {
     expect(find.text('Aún no se puede cerrar'), findsOneWidget);
     expect(find.text('Justificar'), findsNothing, reason: 'el técnico no justifica');
 
-    AppState.instance.setRole(UserRole.supervisor);
+    signInAs(UserRole.supervisor);
     await pumpOnPhone(tester, ValidationScreen(visit: v));
     await tester.tap(find.text('Justificar').first);
     await tester.pumpAndSettle();
@@ -179,8 +176,43 @@ void main() {
     expect(p.status, ProjectStatus.pendienteSync);
   });
 
+  testWidgets('El supervisor pide correcciones y el técnico las atiende antes de cerrar', (tester) async {
+    final p = await seedProject(store, start: true);
+    final v = store.latestVisit(p.id)!;
+    await store.finishVisit(v, null);
+
+    signInAs(UserRole.supervisor);
+    await pumpPushed(tester, VisitScreen(visit: v));
+    expect(find.text('Aprobar'), findsOneWidget);
+    await tester.tap(find.text('Pedir correcciones'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enviar corrección'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Falta la foto de la placa');
+    await tester.pump();
+    await tester.tap(find.text('Enviar corrección'));
+    await tester.pumpAndSettle();
+    expect(v.finished, isFalse);
+    expect(find.text('1 corrección pedida'), findsOneWidget);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -3000));
+    await tester.pumpAndSettle();
+    expect(find.text('REVISIONES · 1'), findsOneWidget);
+    expectNoRenderErrors(tester);
+
+    signInAs(UserRole.tecnico);
+    for (final pend in store.engineFor(v).pendings().where((x) => x.question.question.required)) {
+      await store.justify(v, pend.question.key, 'Prueba');
+    }
+    await tester.pumpWidget(const SizedBox()); // cierra la visita que quedó abierta encima
+    await pumpOnPhone(tester, ValidationScreen(visit: v));
+    expect(find.text('1 corrección sin atender'), findsOneWidget);
+    await tester.tap(find.text('Falta la foto de la placa'));
+    await tester.pumpAndSettle();
+    expect(find.text('Finalizar visita'), findsOneWidget);
+    expectNoRenderErrors(tester);
+  });
+
   testWidgets('El editor guarda la plantilla como versión nueva', (tester) async {
-    AppState.instance.setRole(UserRole.admin);
+    signInAs(UserRole.admin);
     await pumpPushed(tester, TemplateEditorScreen(template: store.templates.first));
 
     expect(find.text('Guardar como v1.1'), findsOneWidget);
@@ -200,24 +232,6 @@ void main() {
     await pumpOnPhone(tester, ProjectDetailScreen(project: p));
     for (final tab in ['Visitas', 'Documentos', 'Evidencia', 'Resumen']) {
       await tester.tap(find.text(tab));
-      await tester.pumpAndSettle();
-      expectNoRenderErrors(tester);
-    }
-  });
-
-  testWidgets('Las pestañas de estadísticas (vista previa) se dibujan', (tester) async {
-    await pumpOnPhone(tester, const StatsScreen());
-    for (final scope in ['Técnico', 'Proyecto', 'Empresa']) {
-      await tester.tap(find.text(scope));
-      await tester.pumpAndSettle();
-      expectNoRenderErrors(tester);
-    }
-  });
-
-  testWidgets('El formulario de mediciones (vista previa) cambia de parámetro', (tester) async {
-    await pumpOnPhone(tester, const MeasurementFormScreen());
-    for (final family in ['Corriente', 'Otros', 'Tensión']) {
-      await tester.tap(find.text(family));
       await tester.pumpAndSettle();
       expectNoRenderErrors(tester);
     }

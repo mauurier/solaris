@@ -13,6 +13,7 @@ import '../../data/survey_store.dart';
 import '../../main.dart';
 import '../capture/evidence_viewer_screen.dart';
 import '../export/zip_export_screen.dart';
+import '../history/history_screen.dart';
 import '../shell/home_shell.dart';
 import '../visits/new_visit_screen.dart';
 import '../visits/question_field.dart';
@@ -64,6 +65,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               HeaderIconButton(Icons.manage_accounts_rounded, onTap: _assign),
               const SizedBox(width: 8),
             ],
+            HeaderIconButton(Icons.history_rounded, onTap: () => push(context, HistoryScreen(project: p))),
+            const SizedBox(width: 8),
             HeaderIconButton(Icons.folder_zip_rounded, onTap: () => push(context, ZipExportScreen(project: p))),
           ],
           bottomBar: latest == null

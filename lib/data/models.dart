@@ -160,9 +160,8 @@ class AppUser {
     required this.role,
     required this.email,
     required this.initials,
+    required this.profile,
     this.active = true,
-    this.projects,
-    this.profile,
   });
 
   factory AppUser.fromProfile(Profile p) => AppUser(
@@ -175,7 +174,7 @@ class AppUser {
         profile: p,
       );
 
-  /// Id de `perfil` (en el modo demo, uno de ejemplo).
+  /// Id de `perfil`.
   final String id;
   final String name;
   final UserRole role;
@@ -183,29 +182,16 @@ class AppUser {
   final String initials;
   bool active;
 
-  /// Solo en los datos de ejemplo; aún no se cuentan en la base.
-  final int? projects;
+  /// Fila de `perfil`.
+  final Profile profile;
 
-  /// Fila de `perfil`; nula en el modo demo.
-  final Profile? profile;
-
-  bool get isSuperadmin => profile?.isSuperadmin ?? false;
+  bool get isSuperadmin => profile.isSuperadmin;
 
   /// Se le puede asignar trabajo: activa y sin vencer (puede empezar después).
   bool get assignable {
-    final p = profile;
-    if (p == null) return active;
-    final s = p.statusOn(DateTime.now());
+    final s = profile.statusOn(DateTime.now());
     return s == AccountStatus.ok || s == AccountStatus.notStarted;
   }
-}
-
-class Client {
-  const Client({required this.name, required this.rfc, required this.projects, required this.contact});
-  final String name;
-  final String rfc;
-  final int projects;
-  final String contact;
 }
 
 class Indicator {
@@ -292,82 +278,6 @@ class Visit {
   final String locationEnd;
 }
 
-class PhotoSlot {
-  PhotoSlot({
-    required this.title,
-    required this.code,
-    required this.isRequired,
-    this.captured = false,
-    this.comment = '',
-    this.time = '',
-  });
-
-  final String title;
-  final String code;
-  final bool isRequired;
-  bool captured;
-  String comment;
-  String time;
-}
-
-class PhotoGroup {
-  PhotoGroup({required this.code, required this.title, required this.slots, required this.icon});
-  final String code;
-  final String title;
-  final IconData icon;
-  final List<PhotoSlot> slots;
-
-  int get captured => slots.where((s) => s.captured).length;
-  int get requiredPending => slots.where((s) => s.isRequired && !s.captured).length;
-  double get progress => slots.isEmpty ? 0 : captured / slots.length;
-}
-
-class Measurement {
-  Measurement({
-    required this.point,
-    required this.type,
-    required this.value,
-    required this.unit,
-    required this.instrument,
-    required this.time,
-    this.note = '',
-  });
-  final String point;
-  final String type;
-  final String value;
-  final String unit;
-  final String instrument;
-  final String time;
-  final String note;
-}
-
-class Equipment {
-  Equipment({
-    required this.id,
-    required this.name,
-    required this.category,
-    required this.brand,
-    required this.model,
-    required this.serial,
-    required this.capacity,
-    required this.location,
-    required this.photos,
-    required this.icon,
-    this.complete = true,
-  });
-  final String id;
-  final String name;
-  final String category;
-  final String brand;
-  final String model;
-  final String serial;
-  final String capacity;
-  final String location;
-  final int photos;
-  final IconData icon;
-  final bool complete;
-}
-
 class Finding {
   Finding({
     required this.id,
@@ -393,21 +303,7 @@ class Finding {
   final int evidences;
 }
 
-class SyncItem {
-  SyncItem({
-    required this.name,
-    required this.kind,
-    required this.size,
-    required this.progress,
-    required this.state,
-  });
-  final String name;
-  final String kind;
-  final String size;
-  double progress;
-  String state; // pendiente | sincronizando | listo | error
-}
-
+/// Un evento listo para la línea de tiempo (ver `describeHistory`).
 class HistoryEvent {
   const HistoryEvent({
     required this.title,

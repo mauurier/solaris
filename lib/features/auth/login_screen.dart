@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
@@ -10,7 +9,6 @@ import '../../data/auth/auth_service.dart';
 import '../../data/auth/user_directory.dart';
 import '../../data/sync/sync_service.dart';
 import '../../data/mock_data.dart';
-import '../../data/models.dart';
 import '../shell/home_shell.dart';
 import '../../main.dart';
 
@@ -27,7 +25,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final _email = TextEditingController();
   final _password = TextEditingController();
-  UserRole _demoRole = UserRole.tecnico;
   bool _obscure = true;
   bool _remember = true;
   bool _loading = false;
@@ -64,7 +61,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       final profile = await AuthService.instance.signIn(email, password, remember: _remember);
       AppState.instance.signIn(profile);
       unawaited(UserDirectory.instance.start());
-      unawaited(SyncService.instance.sync());
+      SyncService.instance.start();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(appRoute(const HomeShell()));
     } on AuthFailure catch (e) {
@@ -72,11 +69,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _enterDemo() {
-    AppState.instance.setRole(_demoRole);
-    Navigator.of(context).pushReplacement(appRoute(const HomeShell()));
   }
 
   Widget _fade(int index, Widget child) {
@@ -225,10 +217,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         ),
                       ),
                     ),
-                    if (kDebugMode) ...[
-                      const SizedBox(height: 18),
-                      _fade(7, _demo()),
-                    ],
                     const SizedBox(height: 30),
                     _fade(
                       8,
@@ -260,66 +248,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  /// Solo en desarrollo: entrar con un rol de ejemplo, sin cuenta, para
-  /// revisar pantallas. No existe en la app compilada para producción.
-  Widget _demo() {
-    return GlassCard(
-      color: AppColors.surface.withValues(alpha: 0.6),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const FieldLabel('Modo demo', hint: 'Solo en desarrollo'),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: UserRole.values.map((r) {
-              final sel = r == _demoRole;
-              return GestureDetector(
-                onTap: () => setState(() => _demoRole = r),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: sel ? r.color.withValues(alpha: 0.14) : AppColors.surfaceAlt,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: sel ? r.color.withValues(alpha: 0.5) : AppColors.border,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(r.icon, size: 14, color: sel ? r.color : AppColors.textMuted),
-                      const SizedBox(width: 7),
-                      Text(
-                        r.short,
-                        style: TextStyle(
-                          fontSize: 12.8,
-                          fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
-                          color: sel ? r.color : AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _loading ? null : _enterDemo,
-              icon: const Icon(Icons.science_outlined, size: 16),
-              label: Text('Entrar como ${_demoRole.short} de ejemplo'),
-            ),
-          ),
-        ],
       ),
     );
   }

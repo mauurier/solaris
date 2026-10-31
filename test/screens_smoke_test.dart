@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:proyecto_app/data/history.dart';
 
 import 'test_helpers.dart';
 
@@ -14,24 +15,17 @@ import 'package:proyecto_app/features/admin/templates_screen.dart';
 import 'package:proyecto_app/features/admin/users_screen.dart';
 import 'package:proyecto_app/features/auth/login_screen.dart';
 import 'package:proyecto_app/features/capture/camera_screen.dart';
-import 'package:proyecto_app/features/equipment/equipment_detail_screen.dart';
-import 'package:proyecto_app/features/equipment/equipment_screen.dart';
 import 'package:proyecto_app/features/export/export_screen.dart';
 import 'package:proyecto_app/features/export/zip_export_screen.dart';
 import 'package:proyecto_app/features/findings/finding_form_screen.dart';
 import 'package:proyecto_app/features/findings/findings_screen.dart';
 import 'package:proyecto_app/features/history/history_screen.dart';
-import 'package:proyecto_app/features/measurements/measurement_form_screen.dart';
-import 'package:proyecto_app/features/measurements/measurements_screen.dart';
-import 'package:proyecto_app/features/photos/photo_sections_screen.dart';
 import 'package:proyecto_app/features/profile/profile_screen.dart';
 import 'package:proyecto_app/features/projects/new_project_screen.dart';
 import 'package:proyecto_app/features/projects/project_detail_screen.dart';
 import 'package:proyecto_app/features/projects/projects_screen.dart';
 import 'package:proyecto_app/features/report/report_preview_screen.dart';
-import 'package:proyecto_app/features/review/review_screen.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
-import 'package:proyecto_app/features/stats/stats_screen.dart';
 import 'package:proyecto_app/features/sync/sync_screen.dart';
 import 'package:proyecto_app/features/visits/new_visit_screen.dart';
 import 'package:proyecto_app/features/visits/section_screen.dart';
@@ -43,10 +37,11 @@ void main() {
   late SurveyStore store;
 
   setUp(() async {
-    AppState.instance.setRole(UserRole.tecnico);
+    signInAs(UserRole.tecnico);
     store = await initTestStore();
     await seedProject(store); // visita sin iniciar
     await seedProject(store, start: true); // visita en curso
+    historySource = _NoHistory();
   });
 
   final mock = Mock.projects.first;
@@ -104,18 +99,11 @@ void main() {
 
   // Módulos de vista previa que siguen con datos de ejemplo.
   final previews = <String, Widget Function()>{
-    'Revisión': () => ReviewScreen(project: mock),
     'Reporte': () => ReportPreviewScreen(project: mock),
     'Exportar (vista previa)': () => ExportScreen(project: mock),
-    'Fotografías (vista previa)': () => const PhotoSectionsScreen(),
-    'Mediciones': () => const MeasurementsScreen(),
-    'Nueva medición': () => const MeasurementFormScreen(),
-    'Equipos': () => const EquipmentScreen(),
-    'Detalle de equipo': () => EquipmentDetailScreen(equipment: Mock.equipment.first),
     'Hallazgos': () => const FindingsScreen(),
     'Detalle de hallazgo': () => FindingFormScreen(finding: Mock.findings.first),
     'Sincronización': () => const SyncScreen(),
-    'Estadísticas': () => const StatsScreen(),
     'Historial': () => const HistoryScreen(),
     'Usuarios': () => const UsersScreen(),
     'Clientes': () => const ClientsScreen(),
@@ -127,4 +115,11 @@ void main() {
       expectNoRenderErrors(tester);
     });
   }
+}
+
+/// Historial vacío: las pruebas no tienen Solaris.
+class _NoHistory implements HistorySource {
+  @override
+  Future<List<HistoryEntry>> page({String? projectId, Set<String>? tables, required int offset, required int limit}) async =>
+      const [];
 }

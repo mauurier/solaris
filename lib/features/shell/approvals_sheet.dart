@@ -10,7 +10,7 @@ import '../projects/project_detail_screen.dart';
 import '../visits/visit_screen.dart';
 
 /// Botón ✓ del supervisor: proyectos con visitas finalizadas que esperan su
-/// aprobación. Al abrir una visita aparece el botón "Aprobar visita".
+/// aprobación. Al abrir una visita aparecen "Aprobar" y "Pedir correcciones".
 void showApprovalsSheet(BuildContext context) {
   final store = SurveyStore.instance;
   showAppSheet(

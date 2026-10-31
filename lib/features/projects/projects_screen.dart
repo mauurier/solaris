@@ -185,11 +185,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     );
   }
 
-  /// Con sesión, deslizar hacia abajo sube lo del teléfono y baja lo del servidor.
-  Widget _refreshable(Widget child) {
-    if (AppState.instance.profile == null) return child;
-    return RefreshIndicator(onRefresh: _sync, child: child);
-  }
+  /// Deslizar hacia abajo sube lo del teléfono y baja lo del servidor.
+  Widget _refreshable(Widget child) => RefreshIndicator(onRefresh: _sync, child: child);
 
   Future<void> _sync() async {
     await Future.wait([UserDirectory.instance.refresh(), SyncService.instance.sync()]);

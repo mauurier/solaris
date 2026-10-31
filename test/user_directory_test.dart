@@ -1,8 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:proyecto_app/data/auth/profile.dart';
 import 'package:proyecto_app/data/auth/user_directory.dart';
-import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
+
+import 'test_helpers.dart';
 
 AppUser _user({String rol = 'tecnico', bool activo = true, String inicio = '2020-01-01', String? fin = '2099-12-31'}) =>
     AppUser.fromProfile(Profile.fromJson({
@@ -22,7 +23,6 @@ void main() {
     expect(u.role, UserRole.supervisor);
     expect(u.initials, 'AT');
     expect(u.email, 'supervisor@solaris.mx');
-    expect(u.projects, isNull);
     expect(_user(rol: 'superadmin', fin: null).isSuperadmin, isTrue);
   });
 
@@ -33,11 +33,12 @@ void main() {
     expect(_user(inicio: '2020-01-01', fin: '2020-12-31').assignable, isFalse);
   });
 
-  test('en el modo demo la lista son los usuarios de ejemplo', () {
-    AppState.instance.setRole(UserRole.supervisor);
+  test('sólo se asigna a cuentas activas; un id desconocido no truena', () {
+    signInAs(UserRole.supervisor);
     final dir = UserDirectory.instance;
-    expect(dir.users, same(Mock.users));
+    expect(dir.users, hasLength(testProfiles.length));
     expect(dir.assignable(UserRole.tecnico).map((u) => u.name), isNot(contains('Sofía Herrera')));
     expect(dir.assignable(UserRole.supervisor), isNotEmpty);
+    expect(dir.nameOf('borrado'), 'Usuario desconocido');
   });
 }

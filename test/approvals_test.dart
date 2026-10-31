@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
@@ -17,7 +16,7 @@ void main() {
       of: find.ancestor(of: centerButton(Icons.check_rounded), matching: find.byType(Stack)).first,
       matching: find.text(text));
 
-  setUp(() => AppState.instance.setRole(UserRole.supervisor));
+  setUp(() => signInAs(UserRole.supervisor));
 
   testWidgets('La palomita del supervisor abre lo que tiene por aprobar', (tester) async {
     final store = await initTestStore();

@@ -27,7 +27,6 @@ class _UsersScreenState extends State<UsersScreen> {
   String _filter = 'Todos';
   final _busy = <String>{};
 
-  bool get _demo => AppState.instance.profile == null;
   bool get _canManage => AppState.instance.profile?.isSuperadmin ?? false;
 
   @override
@@ -64,12 +63,10 @@ class _UsersScreenState extends State<UsersScreen> {
             onSelected: (v) => setState(() => _filter = v),
           ),
           const SizedBox(height: 12),
-          if (_demo || _dir.error != null || !_canManage)
+          if (_dir.error != null || !_canManage)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: _demo
-                  ? const InfoBanner('Modo demo: usuarios de ejemplo. Inicia sesión para ver las cuentas reales.')
-                  : _dir.error != null
+              child: _dir.error != null
                   ? InfoBanner(
                       'No se pudo actualizar la lista. ${_dir.error}',
                       icon: Icons.cloud_off_rounded,
@@ -97,7 +94,7 @@ class _UsersScreenState extends State<UsersScreen> {
     );
   }
 
-  bool _editable(AppUser u) => _canManage && u.profile != null && !u.isSuperadmin;
+  bool _editable(AppUser u) => _canManage && !u.isSuperadmin;
 
   Widget _card(AppUser u) {
     final status = _statusPill(u);
@@ -147,7 +144,7 @@ class _UsersScreenState extends State<UsersScreen> {
               padding: EdgeInsets.all(12),
               child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
             )
-          else if (_editable(u) || _demo)
+          else if (_editable(u))
             Transform.scale(
               scale: 0.75,
               child: Switch(value: u.active, onChanged: (v) => _setActive(u, v)),
@@ -159,14 +156,12 @@ class _UsersScreenState extends State<UsersScreen> {
 
   String _detail(AppUser u) {
     final p = u.profile;
-    if (p == null) return '${u.projects ?? 0} proyectos';
     if (p.isSuperadmin) return 'No vence';
     return p.endsOn == null ? 'Sin fecha de fin' : 'Hasta el ${fmtDate(p.endsOn!)}';
   }
 
   Widget? _statusPill(AppUser u) {
     final p = u.profile;
-    if (p == null) return u.active ? null : const StatusPill('Inactivo', color: AppColors.textMuted, dense: true);
     return switch (p.statusOn(DateTime.now())) {
       AccountStatus.ok => null,
       AccountStatus.inactive => const StatusPill('Inactivo', color: AppColors.textMuted, dense: true),
@@ -177,10 +172,6 @@ class _UsersScreenState extends State<UsersScreen> {
 
   Future<void> _setActive(AppUser u, bool active) async {
     final p = u.profile;
-    if (p == null) {
-      setState(() => u.active = active);
-      return;
-    }
     setState(() => _busy.add(u.email));
     try {
       await _dir.update(u, role: p.role, active: active, startsOn: p.startsOn, endsOn: p.endsOn);
@@ -271,11 +262,11 @@ class _UserSheet extends StatefulWidget {
 }
 
 class _UserSheetState extends State<_UserSheet> {
-  late final Profile? _p = widget.user.profile;
-  late String _role = _p?.role ?? 'tecnico';
+  late final Profile _p = widget.user.profile;
+  late String _role = _p.role;
   late bool _active = widget.user.active;
-  late DateTime _start = _p?.startsOn ?? _today();
-  late DateTime? _end = _p?.endsOn;
+  late DateTime _start = _p.startsOn;
+  late DateTime? _end = _p.endsOn;
   bool _saving = false;
 
   UserRole get _uiRole => switch (_role) {
@@ -349,7 +340,7 @@ class _UserSheetState extends State<_UserSheet> {
               onPressed: _saving ? null : _save,
             ),
             const SizedBox(height: 22),
-          ] else if (p != null) ...[
+          ] else ...[
             KeyValue(
               'Vigencia',
               p.isSuperadmin
@@ -359,7 +350,7 @@ class _UserSheetState extends State<_UserSheet> {
             const SizedBox(height: 18),
           ],
           FieldLabel('Permisos de ${_uiRole.short.toLowerCase()}'),
-          ..._permissions(_uiRole, superadmin: p?.isSuperadmin ?? false).map(
+          ..._permissions(_uiRole, superadmin: p.isSuperadmin).map(
             (t) => Padding(
               padding: const EdgeInsets.only(bottom: 9),
               child: Row(

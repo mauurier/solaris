@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:proyecto_app/core/theme/app_theme.dart';
 import 'package:proyecto_app/data/auth/auth_service.dart';
-import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
+import 'package:proyecto_app/features/shell/home_shell.dart';
 import 'package:proyecto_app/main.dart';
 
 import 'test_helpers.dart';
@@ -32,11 +33,15 @@ Future<void> _pumpApp(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Las pruebas no tienen cuentas de Supabase: entran con el modo demo.
-Future<void> _enterDemo(WidgetTester tester) async {
-  final demo = find.text('Entrar como Técnico de ejemplo');
-  await tester.ensureVisible(demo);
-  await tester.tap(demo);
+/// Las pruebas no tienen cuentas de Supabase: abren el inicio ya con la
+/// sesión de prueba del técnico (ver `signInAs`), como tras el login.
+Future<void> _pumpHome(WidgetTester tester) async {
+  _ignoreTestFontOverflows();
+  tester.view.physicalSize = const Size(390 * 3, 844 * 3);
+  tester.view.devicePixelRatio = 3.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  await tester.pumpWidget(MaterialApp(theme: AppTheme.dark, home: const HomeShell()));
   await tester.pumpAndSettle();
 }
 
@@ -51,7 +56,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    AppState.instance.setRole(UserRole.tecnico);
+    signInAs(UserRole.tecnico);
   });
 
   testWidgets('La pantalla de acceso se muestra al iniciar', (tester) async {
@@ -64,9 +69,7 @@ void main() {
 
   testWidgets('Sin proyectos, el técnico ve que no tiene visitas', (tester) async {
     await initTestStore();
-    await _pumpApp(tester);
-
-    await _enterDemo(tester);
+    await _pumpHome(tester);
 
     expect(find.textContaining('Hola,'), findsOneWidget);
     expect(find.text('Sin visitas pendientes'), findsOneWidget);
@@ -75,9 +78,7 @@ void main() {
   testWidgets('El flujo de levantamiento abre sus secciones', (tester) async {
     final store = await initTestStore();
     await seedProject(store, start: true);
-    await _pumpApp(tester);
-
-    await _enterDemo(tester);
+    await _pumpHome(tester);
 
     await tester.tap(find.text('VISITA EN CURSO'));
     await tester.pumpAndSettle();
@@ -92,9 +93,7 @@ void main() {
   testWidgets('La validación bloquea el cierre con pendientes obligatorios', (tester) async {
     final store = await initTestStore();
     await seedProject(store, start: true);
-    await _pumpApp(tester);
-
-    await _enterDemo(tester);
+    await _pumpHome(tester);
     await tester.tap(find.text('VISITA EN CURSO'));
     await tester.pumpAndSettle();
 

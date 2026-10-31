@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:proyecto_app/core/widgets/ui.dart';
-import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
@@ -13,7 +12,7 @@ import 'test_helpers.dart';
 Finder chip(String label) => find.descendant(of: find.byType(FilterChips), matching: find.text(label));
 
 void main() {
-  setUp(() => AppState.instance.setRole(UserRole.admin));
+  setUp(() => signInAs(UserRole.admin));
 
   testWidgets('El admin filtra y busca visitas', (tester) async {
     final store = await initTestStore();
@@ -85,7 +84,7 @@ void main() {
 
   testWidgets('El supervisor no tiene botón de nueva visita ni filtro de pendientes', (tester) async {
     await initTestStore();
-    AppState.instance.setRole(UserRole.supervisor);
+    signInAs(UserRole.supervisor);
     await pumpOnPhone(tester, const HomeShell());
     HomeNav.openVisits();
     await tester.pumpAndSettle();
@@ -105,7 +104,7 @@ void main() {
     other.name = 'Visita de otro técnico';
     await store.createVisit(other, technicianId: uid('Diego Salas'), motiveId: motiveId(store, 'Mediciones adicionales'));
     store.visitsOf(other.id).firstWhere((v) => v.technician == 'Juan Pérez').technicianId = uid('Ana Torres');
-    AppState.instance.setRole(UserRole.tecnico); // Juan Pérez
+    signInAs(UserRole.tecnico); // Juan Pérez
 
     await pumpOnPhone(tester, const HomeShell());
     HomeNav.openVisits();
@@ -139,8 +138,8 @@ void main() {
     reopened.name = 'Reabierta';
     final rv = store.latestVisit(reopened.id)!;
     await store.finishVisit(rv, const GeoPoint(26, -98));
-    await store.reopenVisit(rv);
-    AppState.instance.setRole(UserRole.supervisor);
+    await store.requestCorrections(rv, items: ['Falta la foto de la placa']);
+    signInAs(UserRole.supervisor);
 
     await pumpOnPhone(tester, const HomeShell());
     HomeNav.openVisits();

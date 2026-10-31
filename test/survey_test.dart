@@ -8,7 +8,6 @@ import 'package:path/path.dart' as p;
 import 'package:proyecto_app/core/services/export_service.dart';
 import 'package:proyecto_app/core/services/watermark.dart';
 import 'package:proyecto_app/data/catalog.dart';
-import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/storage/file_store.dart';
 import 'package:proyecto_app/data/storage/persistence.dart';
@@ -30,7 +29,7 @@ File _jpeg(Directory dir, String name, {int w = 800, int h = 600}) {
 }
 
 void main() {
-  setUp(() => AppState.instance.setRole(UserRole.tecnico));
+  setUp(() => signInAs(UserRole.tecnico));
 
   group('Plantilla', () {
     test('sobrevive a un viaje por JSON sin perder nada', () {
@@ -156,6 +155,20 @@ void main() {
   });
 
   group('Store', () {
+    test('el resumen del Perfil cuenta los levantamientos reales del usuario', () async {
+      final store = await initTestStore();
+      final p = await seedProject(store, start: true);
+      final v = store.latestVisit(p.id)!..startedAt = DateTime.now().subtract(const Duration(minutes: 90));
+      await store.finishVisit(v, null);
+
+      final juan = store.statsFor(UserRole.tecnico, uid('Juan Pérez'));
+      expect(juan.done, 1);
+      expect(juan.active, 1);
+      expect(juan.average!.inMinutes, 90);
+      expect(store.statsFor(UserRole.tecnico, uid('Diego Salas')), (done: 0, active: 0, average: null));
+      expect(store.statsFor(UserRole.admin, uid('Mauricio Aquino')).done, 1, reason: 'el admin ve todos');
+    });
+
     test('crear un proyecto genera la primera visita asignada', () async {
       final store = await initTestStore();
       final proj = await seedProject(store);
@@ -243,10 +256,39 @@ void main() {
       await store.finishVisit(v, const GeoPoint(26, -98));
       expect(v.finished, isTrue);
       expect(proj.status, ProjectStatus.pendienteSync);
-      AppState.instance.setRole(UserRole.supervisor);
-      await store.reopenVisit(v);
+      signInAs(UserRole.supervisor);
+      await store.requestCorrections(v, items: ['Falta la foto de la placa']);
       expect(v.finished, isFalse);
       expect(proj.status, ProjectStatus.conCorrecciones);
+    });
+
+    test('pedir correcciones deja una revisión y bloquea el cierre hasta atenderlas', () async {
+      final store = await initTestStore();
+      final proj = await seedProject(store, start: true);
+      final v = store.latestVisit(proj.id)!;
+      await store.finishVisit(v, null);
+      signInAs(UserRole.supervisor);
+      expect(() => store.requestCorrections(v, items: ['  ']), throwsArgumentError);
+
+      await store.requestCorrections(v, items: ['Foto de la placa', 'Medir L3'], notes: 'Casi completo');
+      final review = store.reviewsOf(v.id).single;
+      expect(review.decision, ReviewDecision.corrections);
+      expect(review.supervisor, 'Laura Méndez');
+      expect(review.notes, 'Casi completo');
+      expect(store.correctionsOf(review.id).map((c) => c.description), ['Foto de la placa', 'Medir L3']);
+      expect(v.status, ProjectStatus.conCorrecciones);
+      expect(store.pendingCorrections(v.id), hasLength(2));
+
+      for (final c in store.pendingCorrections(v.id)) {
+        await store.setCorrectionAttended(c, true);
+      }
+      expect(store.pendingCorrections(v.id), isEmpty);
+      await store.finishVisit(v, null);
+      await store.approveVisit(v, notes: 'Listo');
+      expect(store.reviewsOf(v.id).first.decision, ReviewDecision.approved, reason: 'la más reciente primero');
+      expect(v.status, ProjectStatus.aprobado);
+      expect((await store.db.pending(Tables.reviews)).length, 2);
+      expect((await store.db.pending(Tables.corrections)).length, 2);
     });
 
     test('los pendientes obligatorios sólo cuentan visitas en curso', () async {
@@ -382,8 +424,8 @@ void main() {
       await store.approveVisit(v2);
       expect(proj.status, ProjectStatus.aprobado);
 
-      await store.reopenVisit(v2);
-      expect(v2.state, VisitState.enCurso, reason: 'reabrir quita la aprobación');
+      await store.requestCorrections(v2, items: ['Repetir mediciones']);
+      expect(v2.state, VisitState.enCurso, reason: 'devolverla quita la aprobación');
     });
 
     test('el inicio abre Proyectos con el filtro de pendientes', () {
@@ -591,6 +633,35 @@ void main() {
       expect(row.base, isNull, reason: 'nunca coincidió con el servidor');
       await db.put(Tables.projects, 'p1', {'id': 'p1'}, pending: false);
       expect(await db.pending(Tables.projects), isEmpty);
+      await db.close();
+    });
+
+    test('lo capturado en el modo demo se borra al actualizar la base', () async {
+      final dir = Directory.systemTemp.createTempSync('solaris_v7_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final path = p.join(dir.path, 'solaris.db');
+      final old = await databaseFactoryFfi.openDatabase(path,
+          options: OpenDatabaseOptions(
+            version: 6,
+            onCreate: (db, _) async {
+              for (final t in Tables.all) {
+                await db.execute('CREATE TABLE $t (id TEXT PRIMARY KEY, parent TEXT, data TEXT NOT NULL, '
+                    'updated_at TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 1, '
+                    'deleted INTEGER NOT NULL DEFAULT 0, base TEXT)');
+              }
+              const now = '2026-10-30T10:00:00';
+              await db.insert(Tables.projects,
+                  {'id': 'p1', 'data': '{"id":"p1","supervisorId":"demo-lmendez"}', 'updated_at': now});
+              await db.insert(Tables.answers,
+                  {'id': 'v1|g#0/q', 'data': '{"visitId":"v1","userId":"demo-jperez"}', 'updated_at': now});
+              await db.insert(Tables.projects, {'id': 'p2', 'data': '{"id":"p2","supervisorId":"u-1"}', 'updated_at': now});
+            },
+          ));
+      await old.close();
+
+      final db = await SqlitePersistence.open(path, factory: databaseFactoryFfi);
+      expect((await db.load(Tables.projects)).map((r) => r['id']), ['p2']);
+      expect(await db.load(Tables.answers), isEmpty);
       await db.close();
     });
 

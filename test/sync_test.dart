@@ -9,7 +9,9 @@ import 'package:proyecto_app/data/storage/persistence.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/data/survey_store.dart';
 import 'package:proyecto_app/data/sync/remote_rows.dart';
+import 'package:proyecto_app/data/sync/sync_queue.dart';
 import 'package:proyecto_app/data/sync/sync_service.dart';
+import 'package:proyecto_app/features/sync/sync_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures/electric_template.dart';
@@ -185,7 +187,7 @@ void main() {
         id: me, email: 'tec@solaris.mx', name: 'Juan Pérez', role: 'tecnico', active: true, startsOn: DateTime(2026)));
   });
 
-  tearDown(() => AppState.instance.setRole(UserRole.tecnico));
+  tearDown(() => signInAs(UserRole.tecnico));
 
   test('la primera bajada trae todo y nada queda pendiente de subir', () async {
     await SyncService.instance.pull();
@@ -295,8 +297,8 @@ void main() {
     expect(store.project(projectId)!.technicianIds, [me]);
   });
 
-  test('en el modo demo no se baja nada', () async {
-    AppState.instance.setRole(UserRole.tecnico);
+  test('sin sesión no se baja nada', () async {
+    AppState.instance.signOut();
     await SyncService.instance.pull();
     expect(store.projects, isEmpty);
     expect(server.asked, isEmpty);
@@ -340,6 +342,26 @@ void main() {
     await SyncService.instance.pull();
     expect(store.files.file(e.path).readAsBytesSync(), [1, 2, 3]);
     expect(await store.db.pending(Tables.evidences), isEmpty);
+  });
+
+  test('baja la revisión con sus correcciones', () async {
+    server.rows('revision').add({'id': 'rv1', 'id_visita': visitId, 'id_supervisor': sup,
+        'decision': 'con_correcciones', 'observaciones': 'Casi', 'creado_en': at(6)});
+    server.rows('correccion').add({'id': 'c1', 'id_revision': 'rv1', 'descripcion': 'Medir L3',
+        'estado': 'pendiente', 'atendida_en': null, 'creado_en': at(6), 'actualizado_en': at(6), 'eliminado_en': null});
+    await SyncService.instance.pull();
+
+    final review = store.reviewsOf(visitId).single;
+    expect(review.decision, ReviewDecision.corrections);
+    expect(review.notes, 'Casi');
+    expect(store.pendingCorrections(visitId).single.description, 'Medir L3');
+
+    server.rows('correccion').single
+      ..['estado'] = 'atendida'
+      ..['atendida_en'] = at(7)
+      ..['actualizado_en'] = at(7);
+    await SyncService.instance.pull();
+    expect(store.pendingCorrections(visitId), isEmpty);
   });
 
   test('los estados se escriben como en la base', () {
@@ -524,15 +546,6 @@ void main() {
       expect(server.rows('proyecto').single['nombre'], 'Durante');
     });
 
-    test('lo del modo demo no se sube', () async {
-      final p = await newProject(supervisor: 'demo-lmendez');
-      await sync();
-      expect(server.rows('cliente'), hasLength(1), reason: 'no tiene ids de personas');
-      expect(server.rows('proyecto'), isEmpty);
-      expect(server.rows('visita'), isEmpty, reason: 'su proyecto no está arriba');
-      expect(store.project(p.id), isNotNull);
-      expect(await pendingTables(), containsAll([Tables.projects, Tables.visits]));
-    });
 
     test('si el servidor rechaza un cambio, sigue pendiente y lo demás sí sube', () async {
       final p = await newProject();
@@ -646,6 +659,85 @@ void main() {
       expect(after, isNot(before));
       expect(server.files.keys, ['evidencias/$after']);
       expect(server.files['evidencias/$after'], [2, 2]);
+    });
+
+    test('la cola muestra lo pendiente y junta las respuestas de cada visita', () async {
+      final p = await newProject();
+      final v = store.latestVisit(p.id)!;
+      await store.setAnswer(v, nave, 'DSV');
+      await store.setAnswer(v, const AnswerKey('g_datos', 0, 'techo'), 'TPO');
+      await store.addEvidence(visit: v, key: croquis, kind: EvidenceKind.photo, file: tempFile('croquis.jpg', [1, 2]));
+
+      final queue = await loadSyncQueue(store);
+      expect(queue.map((q) => q.kind), ['Cliente', 'Sitio', 'Proyecto', 'Visita', 'Respuestas', 'Foto']);
+      expect(queue[4].detail, '2 respuestas');
+      expect(queue[4].keys, hasLength(2));
+      expect(queue.last, isA<SyncQueueItem>().having((q) => q.file, 'file', isTrue).having((q) => q.bytes, 'bytes', 2));
+      expect(await store.pendingCount(), 7);
+
+      await sync();
+      expect(await loadSyncQueue(store), isEmpty);
+    });
+
+    testWidgets('la pantalla marca lo que el servidor rechazó', (tester) async {
+      await tester.runAsync(() async {
+        final p = await newProject();
+        await sync();
+        server.readOnly.add('proyecto');
+        p.name = 'Sin permiso';
+        await store.updateProject(p);
+        await SyncService.instance.sync();
+      });
+      await pumpOnPhone(tester, const SyncScreen());
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Con errores'), findsOneWidget);
+      expect(find.text('MTY0142 · Sin permiso'), findsOneWidget);
+      expect(find.text('Error'), findsOneWidget);
+      expect(find.text('No tienes permiso para cambiar este registro.'), findsOneWidget);
+      expectNoRenderErrors(tester);
+    });
+
+    test('los ajustes de sincronización se guardan en el teléfono', () async {
+      final app = AppState.instance;
+      await app.setSyncOnWifiOnly(false);
+      await app.setAutoSync(false);
+      app
+        ..syncOnWifiOnly = true
+        ..autoSync = true;
+      await app.loadSettings();
+      expect(app.syncOnWifiOnly, isFalse);
+      expect(app.autoSync, isFalse);
+      await app.setSyncOnWifiOnly(true);
+      await app.setAutoSync(true);
+    });
+
+    test('la revisión y sus correcciones suben, y lo atendido también', () async {
+      final p = await newProject();
+      final v = store.latestVisit(p.id)!;
+      await store.startVisit(v, null);
+      await store.finishVisit(v, null);
+      await store.requestCorrections(v, items: ['Medir L3'], notes: 'Casi');
+      await sync();
+
+      final review = server.rows('revision').single;
+      expect(review, allOf(containsPair('decision', 'con_correcciones'), containsPair('id_supervisor', me),
+          containsPair('observaciones', 'Casi'), containsPair('id_visita', v.id)));
+      final correction = server.rows('correccion').single;
+      expect(correction, allOf(containsPair('estado', 'pendiente'), containsPair('id_revision', review['id'])));
+      expect(server.rows('visita').single['estado'], 'con_correcciones');
+      expect(server.writes.indexWhere((w) => w.startsWith('revision:')),
+          lessThan(server.writes.indexWhere((w) => w.startsWith('correccion:'))));
+
+      await store.setCorrectionAttended(store.pendingCorrections(v.id).single, true);
+      await sync();
+      expect(correction['estado'], 'atendida');
+      expect(correction['atendida_en'], isNotNull);
+      expect(server.updated['correccion'], [
+        {'estado', 'atendida_en'}
+      ]);
+      expect(await pendingTables(), isEmpty);
     });
 
     test('lo que edita el admin en catálogos y plantillas sube', () async {

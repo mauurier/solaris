@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
 
@@ -10,7 +9,7 @@ void main() {
   /// El + central de la barra de navegación.
   final navPlus = find.byWidgetPredicate((w) => w is Icon && w.icon == Icons.add_rounded && w.size == 25);
 
-  setUp(() => AppState.instance.setRole(UserRole.tecnico)); // Juan Pérez
+  setUp(() => signInAs(UserRole.tecnico)); // Juan Pérez
 
   testWidgets('Con dos visitas en curso, el + pide elegir la visita primero', (tester) async {
     final store = await initTestStore();

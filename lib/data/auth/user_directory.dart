@@ -13,7 +13,7 @@ import 'profile.dart';
 
 /// Usuarios de la tabla `perfil`: la pantalla Usuarios y las listas para
 /// elegir supervisor y técnicos. La lista se guarda en el teléfono para poder
-/// asignar sin conexión. En el modo demo (sin cuenta) usa los de ejemplo.
+/// asignar sin conexión.
 class UserDirectory extends ChangeNotifier {
   UserDirectory._();
   static final instance = UserDirectory._();
@@ -32,18 +32,16 @@ class UserDirectory extends ChangeNotifier {
   /// Error de la última actualización; la lista guardada sigue disponible.
   String? error;
 
-  bool get _demo => AppState.instance.profile == null;
+  bool get _signedOut => AppState.instance.profile == null;
   SupabaseClient get _client => Supabase.instance.client;
 
   /// Cuentas sin borrar.
-  List<AppUser> get users =>
-      _demo ? Mock.users : [for (final p in _profiles.where((p) => !p.deleted)) AppUser.fromProfile(p)];
+  List<AppUser> get users => [for (final p in _profiles.where((p) => !p.deleted)) AppUser.fromProfile(p)];
 
   /// Nombre para mostrar de un id de `perfil`. Incluye cuentas borradas,
   /// porque sus proyectos y evidencias siguen guardando el id.
   String nameOf(String? id) {
     if (id == null || id.isEmpty) return '';
-    if (_demo) return Mock.users.where((u) => u.id == id).firstOrNull?.name ?? 'Usuario desconocido';
     return _profiles.where((p) => p.id == id).firstOrNull?.name ??
         (id == AppState.instance.profile?.id ? AppState.instance.userName : 'Usuario desconocido');
   }
@@ -64,7 +62,7 @@ class UserDirectory extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
-    if (_demo) return;
+    if (_signedOut) return;
     loading = true;
     notifyListeners();
     try {
@@ -127,8 +125,7 @@ class UserDirectory extends ChangeNotifier {
     required DateTime startsOn,
     required DateTime? endsOn,
   }) async {
-    final id = user.profile?.id;
-    if (id == null) return;
+    final id = user.profile.id;
     try {
       final row = await _client
           .from('perfil')
@@ -153,6 +150,13 @@ class UserDirectory extends ChangeNotifier {
   }
 
   /// Al cerrar sesión: la lista es de la cuenta anterior.
+  /// Sólo para pruebas: cuentas sin pasar por Supabase.
+  @visibleForTesting
+  void setProfilesForTesting(List<Profile> profiles) {
+    _profiles = profiles;
+    notifyListeners();
+  }
+
   Future<void> clear() async {
     _profiles = const [];
     error = null;

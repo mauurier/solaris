@@ -15,6 +15,7 @@ import '../../main.dart';
 import '../export/zip_export_screen.dart';
 import '../shell/home_shell.dart';
 import '../shell/quick_capture_sheet.dart';
+import 'review_sheet.dart';
 import 'section_screen.dart';
 import 'validation_screen.dart';
 
@@ -59,16 +60,11 @@ class _VisitScreenState extends State<VisitScreen> {
     );
   }
 
-  Future<void> _approve() async {
-    await _store.approveVisit(v);
-    if (mounted) {
-      showAppSnack(context, 'Visita aprobada', icon: Icons.verified_rounded, color: AppColors.success);
-    }
-  }
-
-  Future<void> _reopen() async {
-    await _store.reopenVisit(v);
-    if (mounted) showAppSnack(context, 'Visita reabierta para correcciones', icon: Icons.lock_open_rounded);
+  /// Revisa el admin, el supervisor de la visita o el del proyecto (como
+  /// `puede_revisar_visita` en Solaris).
+  bool _canReview(SurveyProject project) {
+    final app = AppState.instance;
+    return app.role == UserRole.admin || v.supervisorId == app.userId || project.supervisorId == app.userId;
   }
 
   @override
@@ -78,8 +74,8 @@ class _VisitScreenState extends State<VisitScreen> {
       builder: (context, _) {
         final project = _store.project(v.projectId);
         if (project == null) return const Scaffold(body: SizedBox());
-        final role = AppState.instance.role;
-        final canReopen = v.finished && (role == UserRole.supervisor || role == UserRole.admin);
+        final canReview = v.finished && _canReview(project);
+        final toReview = canReview && v.state == VisitState.finalizada;
 
         return DetailScaffold(
           title: project.name,
@@ -101,10 +97,25 @@ class _VisitScreenState extends State<VisitScreen> {
                   ? Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Supervisor y admin aprueban la visita finalizada.
-                        if (canReopen && v.state == VisitState.finalizada) ...[
-                          AppButton('Aprobar visita',
-                              icon: Icons.verified_rounded, expand: true, onPressed: _approve),
+                        // El supervisor aprueba la visita finalizada o pide correcciones.
+                        if (toReview) ...[
+                          Row(
+                            children: [
+                              Expanded(
+                                child: AppButton('Pedir correcciones',
+                                    kind: AppButtonKind.secondary,
+                                    expand: true,
+                                    onPressed: () => showReviewSheet(context, v, approve: false)),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: AppButton('Aprobar',
+                                    icon: Icons.verified_rounded,
+                                    expand: true,
+                                    onPressed: () => showReviewSheet(context, v, approve: true)),
+                              ),
+                            ],
+                          ),
                           const SizedBox(height: 10),
                         ],
                         Row(
@@ -112,15 +123,16 @@ class _VisitScreenState extends State<VisitScreen> {
                             Expanded(
                               child: AppButton('Exportar ZIP',
                                   icon: Icons.folder_zip_rounded,
-                                  kind: canReopen && v.state == VisitState.finalizada
-                                      ? AppButtonKind.secondary
-                                      : AppButtonKind.primary,
+                                  kind: toReview ? AppButtonKind.secondary : AppButtonKind.primary,
                                   expand: true,
                                   onPressed: () => push(context, ZipExportScreen(project: project))),
                             ),
-                            if (canReopen) ...[
+                            // Ya aprobada, todavía puede devolverla.
+                            if (canReview && !toReview) ...[
                               const SizedBox(width: 10),
-                              AppButton('Reabrir', kind: AppButtonKind.secondary, onPressed: _reopen),
+                              AppButton('Pedir correcciones',
+                                  kind: AppButtonKind.secondary,
+                                  onPressed: () => showReviewSheet(context, v, approve: false)),
                             ],
                           ],
                         ),
@@ -236,6 +248,10 @@ class _VisitScreenState extends State<VisitScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 130),
       children: [
+        if (_store.pendingCorrections(v.id).isNotEmpty) ...[
+          PendingCorrectionsCard(visit: v, editable: _canEdit),
+          const SizedBox(height: 14),
+        ],
         _progressCard(overall, engine, ev),
         const SizedBox(height: 20),
         SectionLabel('Secciones del levantamiento',
@@ -264,6 +280,10 @@ class _VisitScreenState extends State<VisitScreen> {
               ],
             ),
           ),
+        ],
+        if (_store.reviewsOf(v.id).isNotEmpty) ...[
+          const SizedBox(height: 20),
+          ReviewHistory(visit: v, editable: _canEdit),
         ],
       ],
     );

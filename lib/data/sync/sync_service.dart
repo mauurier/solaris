@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -174,6 +174,13 @@ class SyncService extends ChangeNotifier {
   /// `AppState.syncOnWifiOnly`).
   int waitingForWifi = 0;
 
+  /// Lo que el servidor rechazó en la última subida, por fila
+  /// (`tabla local/id`); esas filas siguen pendientes.
+  Map<String, String> failures = const {};
+
+  /// El sistema dice que hay red. Lo mantiene al día [start].
+  bool online = true;
+
   /// Si ahora se pueden subir y bajar archivos. Se cambia en las pruebas.
   Future<bool> Function() filesAllowed = _filesAllowed;
 
@@ -191,6 +198,67 @@ class SyncService extends ChangeNotifier {
   /// Sólo baja.
   Future<void> pull() => _current ??= _run(push: false).whenComplete(() => _current = null);
 
+  // ------------------------------------------------------------- automática
+
+  StreamSubscription<List<ConnectivityResult>>? _network;
+  AppLifecycleListener? _lifecycle;
+  Timer? _debounce;
+  Timer? _periodic;
+  int? _pendingAfterRun;
+
+  /// Espera tras el último cambio en el teléfono antes de subirlo.
+  static const debounce = Duration(seconds: 20);
+  static const _every = Duration(minutes: 10);
+
+  /// Al entrar con sesión: sincroniza ya y, con "Sincronización automática",
+  /// también al volver la conexión, al regresar a la app, unos segundos
+  /// después de cada cambio y cada 10 minutos.
+  void start() {
+    stop();
+    unawaited(sync());
+    unawaited(Connectivity().checkConnectivity().then(_networkChanged));
+    _network = Connectivity().onConnectivityChanged.listen(_networkChanged);
+    _lifecycle = AppLifecycleListener(onResume: _auto);
+    if (SurveyStore.isReady) SurveyStore.instance.addListener(_storeChanged);
+    _periodic = Timer.periodic(_every, (_) => _auto());
+  }
+
+  /// Al cerrar sesión.
+  void stop() {
+    unawaited(_network?.cancel());
+    _network = null;
+    _lifecycle?.dispose();
+    _lifecycle = null;
+    _debounce?.cancel();
+    _periodic?.cancel();
+    if (SurveyStore.isReady) SurveyStore.instance.removeListener(_storeChanged);
+  }
+
+  void _networkChanged(List<ConnectivityResult> result) {
+    final now = result.any((c) => c != ConnectivityResult.none);
+    final back = now && !online;
+    online = now;
+    notifyListeners();
+    if (back) _auto();
+  }
+
+  void _storeChanged() {
+    _debounce?.cancel();
+    _debounce = Timer(debounce, () => unawaited(_autoIfPending()));
+  }
+
+  /// Sólo si hay algo nuevo que subir: lo que el servidor rechazó no se
+  /// reintenta a cada rato (sí cada 10 minutos o a mano).
+  Future<void> _autoIfPending() async {
+    final pending = await SurveyStore.instance.pendingCount();
+    if (pending > 0 && pending != _pendingAfterRun) _auto();
+  }
+
+  void _auto() {
+    final app = AppState.instance;
+    if (app.autoSync && online && !app.offlineMode) unawaited(sync());
+  }
+
   /// Al cerrar sesión: la siguiente cuenta empieza desde cero.
   Future<void> reset() async {
     final prefs = await SharedPreferences.getInstance();
@@ -199,11 +267,14 @@ class SyncService extends ChangeNotifier {
     }
     error = null;
     lastPull = null;
+    failures = const {};
+    waitingForWifi = 0;
+    _pendingAfterRun = null;
   }
 
   Future<void> _run({required bool push}) async {
-    // Modo demo: no hay sesión ni servidor.
-    if (AppState.instance.profile == null || !SurveyStore.isReady) return;
+    // Sin sesión o con la sincronización pausada.
+    if (AppState.instance.profile == null || AppState.instance.offlineMode || !SurveyStore.isReady) return;
     running = true;
     error = null;
     notifyListeners();
@@ -221,10 +292,13 @@ class SyncService extends ChangeNotifier {
       if (files) await _download(store);
       waitingForWifi = up.waitingForWifi;
       lastPull = DateTime.now();
+      if (push) failures = up.failures;
       if (up.failures.isNotEmpty) {
         final n = up.failures.length;
-        error = '${n == 1 ? 'Un cambio no se pudo subir' : '$n cambios no se pudieron subir'}: ${up.failures.first}';
+        error = '${n == 1 ? 'Un cambio no se pudo subir' : '$n cambios no se pudieron subir'}: '
+            '${up.failures.values.first}';
       }
+      _pendingAfterRun = await store.pendingCount();
     } catch (e) {
       error = remoteErrorMessage(e);
     } finally {
@@ -364,7 +438,37 @@ class SyncService extends ChangeNotifier {
     );
     await advance(at, changedAnswers);
 
-    // ----- 5. Documentos y evidencias: las filas; los archivos se bajan aparte.
+    // ----- 5. Revisiones del supervisor y sus correcciones.
+    const rt = RemoteTable.reviews;
+    final localReviews = {for (final r in store.reviews) r.id};
+    final changedReviews = await changed(rt);
+    final missedReviews = again(rt, changedReviews);
+    final reviewRows = [
+      ...changedReviews,
+      if (newVisits.isNotEmpty) ...await remote.where(rt, 'id_visita', newVisits),
+      if (missedReviews.isNotEmpty) ...await remote.where(rt, 'id', missedReviews),
+    ].where((r) => store.visit(r['id_visita'] as String) != null).toList();
+    await store.mergeRemote(Tables.reviews, rows: reviewRows.map(RemoteRows.review).toList());
+    await advance(rt, changedReviews);
+
+    const ct = RemoteTable.corrections;
+    final newReviews = {for (final r in reviewRows) r['id'] as String}.difference(localReviews);
+    final changedCorrections = await changed(ct);
+    final missedCorrections = again(ct, changedCorrections);
+    final visitOfReview = {for (final r in store.reviews) r.id: r.visitId};
+    final correctionRows = [
+      ...changedCorrections,
+      if (newReviews.isNotEmpty) ...await remote.where(ct, 'id_revision', newReviews),
+      if (missedCorrections.isNotEmpty) ...await remote.where(ct, 'id', missedCorrections),
+    ].where((r) => visitOfReview.containsKey(r['id_revision'])).toList();
+    await store.mergeRemote(
+      Tables.corrections,
+      rows: [for (final r in alive(correctionRows)) RemoteRows.correction(r, visitOfReview[r['id_revision']]!)],
+      removed: deletedIds(correctionRows),
+    );
+    await advance(ct, changedCorrections);
+
+    // ----- 6. Documentos y evidencias: las filas; los archivos se bajan aparte.
     for (final (t, parentColumn, parents, exists, toLocal) in [
       (RemoteTable.documents, 'id_proyecto', newProjects, (String id) => store.project(id) != null, RemoteRows.document),
       (RemoteTable.evidences, 'id_visita', newVisits, (String id) => store.visit(id) != null, RemoteRows.evidence),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:proyecto_app/core/widgets/ui.dart';
-import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/features/projects/projects_screen.dart';
@@ -19,7 +18,7 @@ void main() {
     springs.name = 'Springs Window Fashions';
     await store.createVisit(springs, technicianId: uid('Diego Salas'), motiveId: motiveId(store, 'Mediciones adicionales'));
     await store.finishVisit(store.latestVisit(truper.id)!, const GeoPoint(26, -98));
-    AppState.instance.setRole(UserRole.admin);
+    signInAs(UserRole.admin);
 
     await pumpOnPhone(tester, const HomeShell());
     HomeNav.openProjects();
@@ -44,7 +43,7 @@ void main() {
     await store.finishVisit(store.latestVisit(done.id)!, const GeoPoint(26, -98));
     final other = await seedProject(store, start: true);
     await moveToClient(store, other, 'SPRINGS');
-    AppState.instance.setRole(UserRole.admin);
+    signInAs(UserRole.admin);
 
     await pumpOnPhone(tester, const HomeShell());
     HomeNav.openProjects(filter: 'Por sincronizar');
@@ -59,7 +58,7 @@ void main() {
   testWidgets('El + del admin crea una visita para un proyecto existente', (tester) async {
     final store = await initTestStore();
     final proj = await seedProject(store);
-    AppState.instance.setRole(UserRole.admin);
+    signInAs(UserRole.admin);
 
     await pumpOnPhone(tester, const HomeShell());
     await tester.tap(navPlus);
@@ -83,7 +82,7 @@ void main() {
 
   testWidgets('El + del técnico sigue abriendo la captura rápida', (tester) async {
     await initTestStore();
-    AppState.instance.setRole(UserRole.tecnico);
+    signInAs(UserRole.tecnico);
     await pumpOnPhone(tester, const HomeShell());
     await tester.tap(navPlus);
     await tester.pumpAndSettle();
@@ -98,7 +97,7 @@ void main() {
     final notMine = await seedProject(store);
     await moveToClient(store, notMine, 'SPRINGS');
     notMine.technicianIds.clear();
-    AppState.instance.setRole(UserRole.tecnico); // Juan Pérez
+    signInAs(UserRole.tecnico); // Juan Pérez
 
     await pumpOnPhone(tester, const HomeShell());
     HomeNav.openProjects();
@@ -120,7 +119,7 @@ void main() {
     await seedProject(store, start: true); // en captura
     final waiting = await seedProject(store); // asignado
     await moveToClient(store, waiting, 'SPRINGS');
-    AppState.instance.setRole(UserRole.tecnico);
+    signInAs(UserRole.tecnico);
 
     await pumpOnPhone(tester, const HomeShell());
     HomeNav.openProjects(filter: 'Asignados');
@@ -159,7 +158,7 @@ void main() {
     unassigned
       ..name = 'Springs Window Fashions'
       ..technicianIds.clear();
-    AppState.instance.setRole(UserRole.supervisor);
+    signInAs(UserRole.supervisor);
 
     await pumpOnPhone(tester, const HomeShell());
     HomeNav.openProjects();

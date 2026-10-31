@@ -15,11 +15,8 @@ import '../admin/users_screen.dart';
 import '../auth/login_screen.dart';
 import '../history/history_screen.dart';
 import '../shell/home_shell.dart';
-import '../equipment/equipment_screen.dart';
 import '../findings/findings_screen.dart';
 import '../report/report_preview_screen.dart';
-import '../review/review_screen.dart';
-import '../stats/stats_screen.dart';
 import '../sync/sync_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -36,11 +33,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _state.addListener(_refresh);
+    SurveyStore.instance.addListener(_refresh);
   }
 
   @override
   void dispose() {
     _state.removeListener(_refresh);
+    SurveyStore.instance.removeListener(_refresh);
     super.dispose();
   }
 
@@ -87,57 +86,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _stat('27', 'Levantamientos'),
-                      _stat('4', 'Activos'),
-                      _stat('4.6 h', 'Prom./visita'),
-                    ],
-                  ),
+                  Builder(builder: (context) {
+                    final s = SurveyStore.instance.statsFor(_state.role, _state.userId);
+                    return Row(
+                      children: [
+                        _stat('${s.done}', 'Levantamientos'),
+                        _stat('${s.active}', 'Proyectos activos'),
+                        _stat(s.average == null ? '—' : fmtDuration(s.average!), 'Prom./visita'),
+                      ],
+                    );
+                  }),
                 ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 22),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: SectionLabel('Cambiar de rol (demo)'),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: GlassCard(
-              padding: const EdgeInsets.all(12),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: UserRole.values.map((r) {
-                  final sel = r == _state.role;
-                  return GestureDetector(
-                    onTap: () => _state.setRole(r),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                      decoration: BoxDecoration(
-                        color: sel ? r.color.withValues(alpha: 0.14) : AppColors.surfaceAlt,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(
-                            color: sel ? r.color.withValues(alpha: 0.45) : AppColors.border),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(r.icon, size: 13, color: sel ? r.color : AppColors.textMuted),
-                          const SizedBox(width: 6),
-                          Text(r.short,
-                              style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: sel ? FontWeight.w600 : FontWeight.w500,
-                                  color: sel ? r.color : AppColors.textSecondary)),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
               ),
             ),
           ),
@@ -157,7 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     'Pedir comentario por fotografía',
                     'Desactívalo para capturar más rápido',
                     _state.commentPerPhoto,
-                    (v) => setState(() => _state.commentPerPhoto = v),
+                    (v) => setState(() => _state.setCommentPerPhoto(v)),
                   ),
                   const Divider(),
                   _switchRow(
@@ -222,21 +181,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Divider(indent: 14, endIndent: 14),
                   NavRow(
                     dense: true,
+                    title: 'Historial de actividad',
+                    subtitle: 'Quién cambió qué y cuándo, según Solaris',
+                    icon: Icons.history_rounded,
+                    iconColor: AppColors.violet,
+                    onTap: () => push(context, const HistoryScreen()),
+                  ),
+                  const Divider(indent: 14, endIndent: 14),
+                  NavRow(
+                    dense: true,
+                    title: 'Sincronización',
+                    subtitle: 'Lo que falta subir, errores y preferencias',
+                    icon: Icons.cloud_sync_rounded,
+                    iconColor: AppColors.teal,
+                    onTap: () => push(context, const SyncScreen()),
+                  ),
+                  const Divider(indent: 14, endIndent: 14),
+                  NavRow(
+                    dense: true,
                     title: 'Almacenamiento local',
                     subtitle: '${SurveyStore.instance.projects.length} proyectos · '
                         '${SurveyStore.instance.evidences.length} evidencias en este teléfono',
                     icon: Icons.sd_storage_rounded,
                     iconColor: AppColors.warning,
-                    onTap: () => showAppSnack(context, 'Todo se guarda en el teléfono; comparte con Exportar ZIP'),
+                    onTap: () => showAppSnack(context, 'Todo se guarda en el teléfono y se sube al sincronizar'),
                   ),
                   const Divider(indent: 14, endIndent: 14),
                   NavRow(
                     dense: true,
                     title: 'Acerca de Solaris',
-                    subtitle: 'Versión 1.0.0 · Fase 1 offline',
+                    subtitle: 'Versión 1.0.0 · Trabaja sin conexión y sincroniza con Solaris',
                     icon: Icons.info_outline_rounded,
                     iconColor: AppColors.textMuted,
-                    onTap: () => showAppSnack(context, 'Fase 1: levantamiento offline con exportación ZIP'),
+                    onTap: () => showAppSnack(context, 'Levantamiento sin conexión, sincronización y exportación ZIP'),
                   ),
                 ],
               ),
@@ -300,13 +277,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Módulos del prototipo que aún no se conectan a datos reales.
   static final _previews = <(String, IconData, Widget Function())>[
-    ('Revisión del supervisor', Icons.rate_review_rounded, () => ReviewScreen(project: Mock.active)),
     ('Reporte PDF', Icons.picture_as_pdf_rounded, () => ReportPreviewScreen(project: Mock.active)),
     ('Hallazgos', Icons.report_problem_rounded, () => const FindingsScreen()),
-    ('Registro de equipos', Icons.memory_rounded, () => const EquipmentScreen()),
-    ('Sincronización', Icons.cloud_sync_rounded, () => const SyncScreen()),
-    ('Estadísticas', Icons.insights_rounded, () => const StatsScreen()),
-    ('Historial de actividad', Icons.history_rounded, () => const HistoryScreen()),
   ];
 
   Widget _switchRow(IconData i, String title, String sub, bool value, ValueChanged<bool>? onChanged) {

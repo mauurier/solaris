@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:proyecto_app/core/theme/app_theme.dart';
+import 'package:proyecto_app/data/auth/profile.dart';
+import 'package:proyecto_app/data/auth/user_directory.dart';
 import 'package:proyecto_app/data/catalog.dart';
 import 'package:proyecto_app/data/mock_data.dart';
+import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/storage/file_store.dart';
 import 'package:proyecto_app/data/storage/persistence.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
@@ -74,8 +77,35 @@ Future<TemplateDef> seedTemplate(SurveyStore store) async {
   return store.template(t.id)!;
 }
 
-/// Id de `perfil` del usuario de ejemplo con ese nombre (modo demo).
-String uid(String name) => Mock.users.firstWhere((u) => u.name == name).id;
+/// Cuentas de prueba, como si vinieran de la tabla `perfil`.
+final testProfiles = [
+  _profile('u-maquino', 'Mauricio Aquino', 'admin'),
+  _profile('u-lmendez', 'Laura Méndez', 'supervisor'),
+  _profile('u-jperez', 'Juan Pérez', 'tecnico'),
+  _profile('u-dsalas', 'Diego Salas', 'tecnico'),
+  _profile('u-atorres', 'Ana Torres', 'tecnico'),
+  _profile('u-cruiz', 'Ing. Carlos Ruiz', 'supervisor'),
+  _profile('u-sherrera', 'Sofía Herrera', 'tecnico', active: false),
+];
+
+Profile _profile(String id, String name, String role, {bool active = true}) => Profile(
+    id: id, email: '$id@solaris.mx', name: name, role: role, active: active, startsOn: DateTime(2026));
+
+/// Inicia sesión con la cuenta de prueba del rol (admin: Mauricio Aquino,
+/// supervisor: Laura Méndez, técnico: Juan Pérez) y carga las demás en el
+/// directorio de usuarios.
+void signInAs(UserRole role) {
+  UserDirectory.instance.setProfilesForTesting(testProfiles);
+  final name = switch (role) {
+    UserRole.admin => 'Mauricio Aquino',
+    UserRole.supervisor => 'Laura Méndez',
+    UserRole.tecnico => 'Juan Pérez',
+  };
+  AppState.instance.signIn(testProfiles.firstWhere((p) => p.name == name));
+}
+
+/// Id de `perfil` de la cuenta de prueba con ese nombre.
+String uid(String name) => testProfiles.firstWhere((p) => p.name == name).id;
 
 /// Id del cliente con esa razón social; lo crea si no existe.
 Future<String> clientId(SurveyStore store, String name) async =>

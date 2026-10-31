@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:proyecto_app/core/widgets/ui.dart';
-import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/features/dashboard/breakdown_screen.dart';
@@ -14,7 +13,7 @@ import 'package:proyecto_app/features/shell/home_shell.dart';
 import 'test_helpers.dart';
 
 void main() {
-  setUp(() => AppState.instance.setRole(UserRole.admin));
+  setUp(() => signInAs(UserRole.admin));
 
   testWidgets('Evidencias por proyecto muestra la gráfica del proyecto elegido', (tester) async {
     final store = await initTestStore();
@@ -61,7 +60,7 @@ void main() {
     final store = await initTestStore();
     final proj = await seedProject(store, start: true);
     final progress = store.engineFor(store.latestVisit(proj.id)!).evidenceProgress;
-    AppState.instance.setRole(UserRole.tecnico);
+    signInAs(UserRole.tecnico);
 
     await pumpOnPhone(tester, const HomeShell());
     expect(find.text('0/${progress.required}', skipOffstage: false), findsOneWidget);
@@ -74,7 +73,7 @@ void main() {
     await seedProject(store, start: true); // en captura
     final done = await seedProject(store, start: true);
     await store.finishVisit(store.latestVisit(done.id)!, const GeoPoint(26, -98)); // por revisar
-    AppState.instance.setRole(UserRole.supervisor);
+    signInAs(UserRole.supervisor);
 
     await pumpOnPhone(tester, const HomeShell());
     String valueOf(String title) {

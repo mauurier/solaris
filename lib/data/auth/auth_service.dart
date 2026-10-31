@@ -6,8 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config/supabase_config.dart';
-import 'profile.dart';
+import '../mock_data.dart';
 import '../sync/sync_service.dart';
+import 'profile.dart';
 import 'user_directory.dart';
 
 /// Error que se le puede mostrar tal cual al usuario.
@@ -130,6 +131,8 @@ class AuthService {
     await prefs.remove(_profileKey);
     await prefs.remove(_rememberKey);
     await UserDirectory.instance.clear();
+    SyncService.instance.stop();
+    AppState.instance.signOut();
     await SyncService.instance.reset();
   }
 

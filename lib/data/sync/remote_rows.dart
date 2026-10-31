@@ -49,6 +49,12 @@ class RemoteTable {
           'eliminado_en');
   static const answers = RemoteTable('respuesta', Tables.answers,
       'id, id_visita, clave_grupo, numero_repeticion, clave_pregunta, valor, actualizado_en, eliminado_en');
+  /// Sin `actualizado_en` ni `eliminado_en`: una revisión no se edita.
+  static const reviews = RemoteTable(
+      'revision', Tables.reviews, 'id, id_visita, id_supervisor, decision, observaciones, creado_en',
+      timestamp: 'creado_en');
+  static const corrections = RemoteTable('correccion', Tables.corrections,
+      'id, id_revision, descripcion, estado, atendida_en, creado_en, actualizado_en, eliminado_en');
   static const documents = RemoteTable(
       'documento',
       Tables.documents,
@@ -169,6 +175,25 @@ class RemoteRows {
         'at': r['actualizado_en'],
       };
 
+  static Map<String, Object?> review(Map<String, Object?> r) => {
+        'id': r['id'],
+        'visitId': r['id_visita'],
+        'supervisorId': r['id_supervisor'],
+        'decision': r['decision'] == 'aprobada' ? 'approved' : 'corrections',
+        'notes': r['observaciones'] ?? '',
+        'createdAt': r['creado_en'],
+      };
+
+  /// [visitId] sale de su revisión, que ya está en el teléfono.
+  static Map<String, Object?> correction(Map<String, Object?> r, String visitId) => {
+        'id': r['id'],
+        'reviewId': r['id_revision'],
+        'visitId': visitId,
+        'description': r['descripcion'],
+        'createdAt': r['creado_en'],
+        'attendedAt': r['estado'] == 'atendida' ? (r['atendida_en'] ?? r['actualizado_en']) : null,
+      };
+
   static const _kinds = {'photo': 'foto', 'video': 'video', 'document': 'documento', 'signature': 'firma'};
 
   /// `ruta_archivo` es `{proyecto}/{archivo}`; la copia local va en
@@ -284,6 +309,20 @@ class RemoteRows {
             'justificaciones': j['justifications'] ?? const {},
           },
         Tables.answers => _answerToDb(j),
+        Tables.reviews => {
+            'id_visita': j['visitId'],
+            'id_supervisor': j['supervisorId'],
+            'decision': j['decision'] == 'approved' ? 'aprobada' : 'con_correcciones',
+            'observaciones': _text(j['notes']),
+            'creado_en': _utc(j['createdAt']),
+          },
+        Tables.corrections => {
+            'id_revision': j['reviewId'],
+            'descripcion': j['description'],
+            'estado': j['attendedAt'] == null ? 'pendiente' : 'atendida',
+            'atendida_en': _utc(j['attendedAt']),
+            'creado_en': _utc(j['createdAt']),
+          },
         // `tamano` y `subido_en` los pone la subida del archivo.
         Tables.documents => {
             'id_proyecto': j['projectId'],
