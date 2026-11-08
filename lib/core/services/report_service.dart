@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/services.dart';
@@ -14,9 +15,51 @@ import '../../data/survey_store.dart';
 import 'export_service.dart';
 import 'formatting.dart';
 
+/// Qué partes de la visita van en el reporte. Por omisión va todo; la
+/// portada siempre va porque identifica el documento.
+class ReportOptions {
+  ReportOptions({
+    this.summary = true,
+    this.findings = true,
+    this.photos = true,
+    this.skipUnanswered = false,
+    Set<String>? excludedBlocks,
+  }) : excludedBlocks = excludedBlocks ?? {};
+
+  /// Recuento de hallazgos, resumen y datos de la visita.
+  bool summary;
+
+  /// Hallazgos con sus fotos.
+  bool findings;
+
+  /// Fotos de las preguntas y de los hallazgos. Sin ellas sólo se dice
+  /// cuántas hay; las firmas siempre van.
+  bool photos;
+
+  /// Omite las preguntas sin respuesta ni archivos.
+  bool skipUnanswered;
+
+  /// Bloques que no van, como `grupo#instancia` (ver [blockKey]). Se guardan
+  /// los excluidos para que un bloque nuevo (Tablero 03) entre por omisión.
+  final Set<String> excludedBlocks;
+
+  static String blockKey(GroupDef g, int instance) => '${g.id}#$instance';
+
+  bool includes(GroupDef g, int instance) => !excludedBlocks.contains(blockKey(g, instance));
+
+  ReportOptions copy() => ReportOptions(
+        summary: summary,
+        findings: findings,
+        photos: photos,
+        skipUnanswered: skipUnanswered,
+        excludedBlocks: {...excludedBlocks},
+      );
+}
+
 /// Reporte PDF de una visita: portada, resumen con los hallazgos por
 /// severidad, cada hallazgo con sus fotos y cada sección de la plantilla con
 /// sus respuestas y evidencias, numeradas como en el levantamiento (2.1.3).
+/// [ReportOptions] decide qué partes van.
 class ReportService {
   ReportService(this.store);
   final SurveyStore store;
@@ -30,22 +73,43 @@ class ReportService {
     return 'REPORTE_${slug(project?.code ?? 'PROYECTO', max: 20)}_${v.label}.pdf';
   }
 
+  /// Fotos y firmas que salen en el reporte con [options].
+  List<Evidence> imagesFor(FieldVisit v, ReportOptions options) {
+    final template = store.templateFor(v);
+    final groups = {for (final s in template.sections) for (final g in s.groups) g.id: g};
+    bool wanted(Evidence e) {
+      if (e.findingId != null) return options.findings && options.photos && e.kind == EvidenceKind.photo;
+      if (e.kind == EvidenceKind.photo && !options.photos) return false;
+      final key = AnswerKey.tryParse(e.key);
+      final g = key == null ? null : groups[key.groupId];
+      return g != null && options.includes(g, key!.instance);
+    }
+
+    return store
+        .evidenceOf(v.id)
+        .where((e) => e.kind == EvidenceKind.photo || e.kind == EvidenceKind.signature)
+        .where(wanted)
+        .where((e) => store.files.exists(e.path))
+        .toList();
+  }
+
   /// Arma el PDF. [onProgress] recibe cuántas fotos van preparadas de cuántas.
-  Future<Uint8List> build(FieldVisit v, {DateTime? now, void Function(int done, int total)? onProgress}) async {
+  Future<Uint8List> build(
+    FieldVisit v, {
+    ReportOptions? options,
+    DateTime? now,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    final opts = options ?? ReportOptions();
     final regular = pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Regular.ttf'));
     final bold = pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Bold.ttf'));
 
     // Fotos y firmas, ya reducidas, por id de evidencia.
     final images = <String, Uint8List>{};
-    final pending = store
-        .evidenceOf(v.id)
-        .where((e) => e.kind == EvidenceKind.photo || e.kind == EvidenceKind.signature)
-        .where((e) => store.files.exists(e.path))
-        .toList();
+    final pending = imagesFor(v, opts);
     for (var i = 0; i < pending.length; i++) {
       final e = pending[i];
-      final bytes = await store.files.file(e.path).readAsBytes();
-      final small = await Isolate.run(() => _shrink(bytes));
+      final small = await _shrinkFile(store.files.file(e.path).path);
       if (small != null) images[e.id] = small;
       onProgress?.call(i + 1, pending.length);
     }
@@ -55,10 +119,17 @@ class ReportService {
       author: 'Solaris',
       theme: pw.ThemeData.withFont(base: regular, bold: bold),
     );
-    _ReportBuilder(store, v, images, now ?? DateTime.now()).addTo(doc);
+    _ReportBuilder(store, v, images, now ?? DateTime.now(), opts).addTo(doc);
     return doc.save();
   }
 }
+
+/// Reduce la foto en otro isolate. Es una función suelta a propósito: el
+/// cierre que viaja al isolate sólo lleva la ruta. Escrito dentro de un
+/// método arrastraba `this` y con él el store entero, incluidas las pantallas
+/// que lo escuchan, y el envío fallaba en el teléfono ("object is
+/// unsendable").
+Future<Uint8List?> _shrinkFile(String path) => Isolate.run(() => _shrink(File(path).readAsBytesSync()));
 
 /// Reduce y vuelve a comprimir una foto; nula si no se pudo leer.
 Uint8List? _shrink(Uint8List bytes) {
@@ -78,6 +149,7 @@ final _muted = PdfColor.fromHex('#6B7280');
 final _line = PdfColor.fromHex('#E5E7EB');
 final _soft = PdfColor.fromHex('#F7F8FA');
 final _accent = PdfColor.fromHex('#F59E0B');
+final _link = PdfColor.fromHex('#2563EB');
 
 PdfColor _severityColor(Severity s) => switch (s) {
       Severity.critica => PdfColor.fromHex('#DC2626'),
@@ -87,11 +159,12 @@ PdfColor _severityColor(Severity s) => switch (s) {
     };
 
 class _ReportBuilder {
-  _ReportBuilder(this.store, this.v, this.images, this.now);
+  _ReportBuilder(this.store, this.v, this.images, this.now, this.options);
   final SurveyStore store;
   final FieldVisit v;
   final Map<String, Uint8List> images;
   final DateTime now;
+  final ReportOptions options;
 
   late final project = store.project(v.projectId);
   late final template = store.templateFor(v);
@@ -106,10 +179,10 @@ class _ReportBuilder {
       footer: _footer,
       build: (_) => [
         ..._cover(),
-        pw.NewPage(),
-        ..._summary(),
-        if (findings.isNotEmpty) ...[pw.NewPage(), ..._findings()],
-        for (var i = 0; i < template.sections.length; i++) ...[pw.NewPage(), ..._section(i)],
+        if (options.summary) ...[pw.NewPage(), ..._summary()],
+        if (options.findings && findings.isNotEmpty) ...[pw.NewPage(), ..._findings()],
+        for (var i = 0; i < template.sections.length; i++)
+          if (_section(i) case final body when body.isNotEmpty) ...[pw.NewPage(), ...body],
       ],
     ));
   }
@@ -148,17 +221,29 @@ class _ReportBuilder {
         child: pw.Text(text, style: pw.TextStyle(fontSize: size, fontWeight: pw.FontWeight.bold, color: _ink)),
       );
 
-  pw.Widget _keyValue(String key, String value) => pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 9),
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text(key, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _ink)),
-            pw.SizedBox(height: 2),
-            pw.Text(value.isEmpty ? '—' : value, style: pw.TextStyle(fontSize: 10, color: _muted)),
-          ],
+  /// Dato con su etiqueta. Es un solo texto para que uno muy largo (notas de
+  /// cierre) pueda seguir en la página siguiente; con [link] el valor abre
+  /// esa dirección (coordenadas → Google Maps).
+  pw.Widget _keyValue(String key, String value, {String? link}) {
+    final text = pw.RichText(
+      text: pw.TextSpan(children: [
+        pw.TextSpan(text: '$key\n', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: _ink)),
+        pw.TextSpan(
+          text: value.isEmpty ? '—' : value,
+          style: pw.TextStyle(
+            fontSize: 10,
+            color: link == null ? _muted : _link,
+            decoration: link == null ? null : pw.TextDecoration.underline,
+            lineSpacing: 2,
+          ),
         ),
-      );
+      ]),
+    );
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 9),
+      child: link == null || value.isEmpty ? text : pw.UrlLink(destination: link, child: text),
+    );
+  }
 
   String _when(DateTime d) => fmtDateTime(d);
 
@@ -185,7 +270,7 @@ class _ReportBuilder {
       _keyValue('Cliente', p?.client ?? ''),
       _keyValue('Sitio', p?.site ?? ''),
       _keyValue('Dirección', p?.address ?? ''),
-      _keyValue('Coordenadas', p?.coords?.label ?? ''),
+      _keyValue('Coordenadas', p?.coords?.label ?? '', link: p?.coords?.mapsUrl),
       _keyValue('Tipo de proyecto', p?.type ?? ''),
       _keyValue('Visita', '${v.label} · ${v.motive}'),
       _keyValue('Equipo', 'Técnico: ${v.technician}   ·   Supervisor: ${v.supervisor}'),
@@ -306,45 +391,64 @@ class _ReportBuilder {
                 if (f.location.isNotEmpty) pw.Text('Ubicación: ${f.location}', style: pw.TextStyle(fontSize: 9.5, color: _muted)),
                 if (f.recommendation.isNotEmpty)
                   pw.Text('Recomendación: ${f.recommendation}', style: pw.TextStyle(fontSize: 9.5, color: _muted)),
-                pw.Text('${f.user} · ${_when(f.createdAt)}${f.point == null ? '' : ' · ${f.point!.label}'}',
-                    style: pw.TextStyle(fontSize: 8.5, color: _muted)),
+                pw.Row(children: [
+                  pw.Text('${f.user} · ${_when(f.createdAt)}', style: pw.TextStyle(fontSize: 8.5, color: _muted)),
+                  if (f.point != null) ...[
+                    pw.Text(' · ', style: pw.TextStyle(fontSize: 8.5, color: _muted)),
+                    _mapsLink(f.point!, f.point!.label, size: 8.5),
+                  ],
+                ]),
               ],
             ),
           ),
-          ..._photoRows(store.evidenceOfFinding(f.id)),
+          if (options.photos) ..._photoRows(store.evidenceOfFinding(f.id)),
           pw.SizedBox(height: 10),
         ],
       ];
 
   // ------------------------------------------------------------ secciones
 
-  List<pw.Widget> _section(int si) {
-    final s = template.sections[si];
-    final out = <pw.Widget>[_title('${si + 1} - ${s.title}')];
-    for (var gi = 0; gi < s.groups.length; gi++) {
-      final g = s.groups[gi];
-      final count = engine.instanceCount(g);
-      for (var inst = 0; inst < count; inst++) {
-        final groupNo = '${si + 1}.${gi + 1}';
-        final name = g.repeatable ? g.instanceName(inst) : g.title;
-        out.add(pw.Padding(
-          padding: const pw.EdgeInsets.only(top: 6, bottom: 8),
-          child: pw.Text('$groupNo. $name', style: pw.TextStyle(fontSize: 12.5, fontWeight: pw.FontWeight.bold, color: _ink)),
-        ));
-        for (var qi = 0; qi < g.questions.length; qi++) {
-          final q = g.questions[qi];
-          if (!engine.isVisible(g, inst, q)) continue;
-          out.addAll(_question('$groupNo.${qi + 1}', g, inst, q));
+  /// La sección con sus bloques elegidos; vacía si no va ninguno. Los números
+  /// (2.1.3) son los del levantamiento aunque falten bloques.
+  late final _sections = <int, List<pw.Widget>>{};
+  List<pw.Widget> _section(int si) => _sections.putIfAbsent(si, () {
+        final s = template.sections[si];
+        final out = <pw.Widget>[];
+        for (var gi = 0; gi < s.groups.length; gi++) {
+          final g = s.groups[gi];
+          final count = engine.instanceCount(g);
+          for (var inst = 0; inst < count; inst++) {
+            if (!options.includes(g, inst)) continue;
+            final groupNo = '${si + 1}.${gi + 1}';
+            final questions = <pw.Widget>[];
+            for (var qi = 0; qi < g.questions.length; qi++) {
+              final q = g.questions[qi];
+              if (!engine.isVisible(g, inst, q)) continue;
+              questions.addAll(_question('$groupNo.${qi + 1}', g, inst, q));
+            }
+            if (questions.isEmpty) continue;
+            final name = g.repeatable ? g.instanceName(inst) : g.title;
+            out
+              ..add(pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 6, bottom: 8),
+                child: pw.Text('$groupNo. $name',
+                    style: pw.TextStyle(fontSize: 12.5, fontWeight: pw.FontWeight.bold, color: _ink)),
+              ))
+              ..addAll(questions);
+          }
         }
-      }
-    }
-    return out;
-  }
+        return out.isEmpty ? out : [_title('${si + 1} - ${s.title}'), ...out];
+      });
+
+  bool _hasFiles(AnswerKey key, QuestionDef q) =>
+      store.evidenceOf(v.id, key).isNotEmpty ||
+      (q.docCategory.isNotEmpty && store.documentsOf(v.projectId).any((d) => d.category == q.docCategory));
 
   List<pw.Widget> _question(String number, GroupDef g, int inst, QuestionDef q) {
     final key = AnswerKey(g.id, inst, q.id);
     final value = engine.value(key) ?? '';
     final justification = v.justifications[key.toString()];
+    if (options.skipUnanswered && value.isEmpty && justification == null && !_hasFiles(key, q)) return const [];
     final box = pw.Container(
       width: double.infinity,
       padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -357,15 +461,22 @@ class _ReportBuilder {
       QType.single => [_options(q.options, {value})],
       QType.multi => [_options(q.options, VisitEngine.splitMulti(value).toSet())],
       QType.scale => [_scale(q, value)],
+      QType.photo when !options.photos => [_photoCount(store.evidenceOf(v.id, key))],
       QType.photo || QType.signature => _photoRows(store.evidenceOf(v.id, key)),
       QType.video || QType.document => _fileList(key, q),
       _ => [_text(value.isEmpty ? '' : (q.unit.isEmpty ? value : '$value ${q.unit}'))],
     };
+    // Un texto largo puede seguir en otra página, pero sólo suelto: dentro de
+    // una columna no se parte y el PDF falla si no cabe en una hoja.
+    final longText = value.length > 400 && (q.type == QType.text || q.type == QType.longText);
     return [
       // El título va junto con el primer renglón de la respuesta: no queda
       // solo al final de una página.
-      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [box, answer.first]),
-      ...answer.skip(1),
+      if (longText)
+        box
+      else
+        pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [box, answer.first]),
+      ...answer.skip(longText ? 0 : 1),
       if (justification != null)
         pw.Padding(
           padding: const pw.EdgeInsets.only(top: 2, bottom: 4),
@@ -440,6 +551,18 @@ class _ReportBuilder {
     );
   }
 
+  pw.Widget _photoCount(List<Evidence> evidences) {
+    final n = evidences.where((e) => e.kind == EvidenceKind.photo).length;
+    return n == 0 ? _text('') : _text('$n foto${n == 1 ? '' : 's'} (no incluidas en este reporte)');
+  }
+
+  /// Texto que abre las coordenadas en Google Maps.
+  pw.Widget _mapsLink(GeoPoint point, String text, {double size = 7.5}) => pw.UrlLink(
+        destination: point.mapsUrl,
+        child: pw.Text(text,
+            style: pw.TextStyle(fontSize: size, color: _link, decoration: pw.TextDecoration.underline)),
+      );
+
   /// Tres fotos por renglón; cada renglón es un widget aparte para que las
   /// preguntas con muchas fotos se repartan entre páginas.
   List<pw.Widget> _photoRows(List<Evidence> evidences) {
@@ -464,22 +587,30 @@ class _ReportBuilder {
     ];
   }
 
+  /// La foto y sus datos. Con coordenadas, la foto y el texto "Ver en Maps"
+  /// abren la ubicación donde se tomó.
   pw.Widget _photo(Evidence e) {
     final bytes = images[e.id];
+    final point = e.point;
+    final picture = pw.Container(
+      height: 120,
+      width: double.infinity,
+      decoration: pw.BoxDecoration(border: pw.Border.all(color: _line), borderRadius: pw.BorderRadius.circular(4)),
+      child: bytes == null
+          ? pw.Center(child: pw.Text('Foto no disponible', style: pw.TextStyle(fontSize: 8, color: _muted)))
+          : pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.contain),
+    );
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Container(
-          height: 120,
-          width: double.infinity,
-          decoration: pw.BoxDecoration(border: pw.Border.all(color: _line), borderRadius: pw.BorderRadius.circular(4)),
-          child: bytes == null
-              ? pw.Center(child: pw.Text('Foto no disponible', style: pw.TextStyle(fontSize: 8, color: _muted)))
-              : pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.contain),
-        ),
+        if (point == null || e.kind != EvidenceKind.photo)
+          picture
+        else
+          pw.UrlLink(destination: point.mapsUrl, child: picture),
         pw.SizedBox(height: 3),
         pw.Text(e.user, style: pw.TextStyle(fontSize: 7.5, color: _muted)),
         pw.Text(_when(e.capturedAt), style: pw.TextStyle(fontSize: 7.5, color: _muted)),
+        if (point != null && e.kind == EvidenceKind.photo) _mapsLink(point, 'Ver en Maps · ${point.label}'),
         if (e.comment.isNotEmpty) pw.Text(e.comment, style: pw.TextStyle(fontSize: 7.5, color: _ink)),
       ],
     );

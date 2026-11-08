@@ -17,6 +17,7 @@ import '../history/history_screen.dart';
 import '../shell/home_shell.dart';
 import '../findings/findings_screen.dart';
 import '../sync/sync_screen.dart';
+import 'sign_out.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -236,6 +237,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               kind: AppButtonKind.danger,
               expand: true,
               onPressed: () async {
+                // Primero sube lo pendiente de esta cuenta (ver sign_out.dart).
+                if (!await prepareSignOut(context)) return;
                 await AuthService.instance.signOut();
                 if (!context.mounted) return;
                 Navigator.of(context).pushAndRemoveUntil(appRoute(const LoginScreen()), (r) => false);

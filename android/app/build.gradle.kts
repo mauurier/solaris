@@ -43,3 +43,12 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Marca de agua y 720p de los videos (VideoWatermark.kt). Misma versión
+    // de Media3 que usa video_player para no mezclar.
+    val media3 = "1.9.2"
+    implementation("androidx.media3:media3-transformer:$media3")
+    implementation("androidx.media3:media3-effect:$media3")
+    implementation("androidx.media3:media3-common:$media3")
+}

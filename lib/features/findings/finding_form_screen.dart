@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/services/formatting.dart';
+import '../../core/services/maps.dart';
 import '../../core/services/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
@@ -245,7 +246,7 @@ class _FindingFormScreenState extends State<FindingFormScreen> {
                       child: SizedBox(
                         width: 92,
                         child: _store.files.exists(e.path)
-                            ? Image.file(_store.files.file(e.path), fit: BoxFit.cover)
+                            ? Image.file(_store.files.file(e.path), fit: BoxFit.cover, cacheWidth: 276)
                             : const ColoredBox(
                                 color: AppColors.surfaceHigh,
                                 child: Icon(Icons.cloud_download_rounded, color: AppColors.textMuted),
@@ -289,7 +290,7 @@ class _FindingFormScreenState extends State<FindingFormScreen> {
       );
 
   Future<void> _openPhoto(Evidence e) async {
-    final remove = await showDialog<bool>(
+    final action = await showDialog<String>(
       context: context,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.black,
@@ -298,14 +299,19 @@ class _FindingFormScreenState extends State<FindingFormScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (_store.files.exists(e.path))
-              InteractiveViewer(child: Image.file(_store.files.file(e.path), fit: BoxFit.contain)),
+              MapsPhoto(
+                point: e.point,
+                child: InteractiveViewer(child: Image.file(_store.files.file(e.path), fit: BoxFit.contain)),
+              ),
             Padding(
               padding: const EdgeInsets.all(8),
               child: Row(
                 children: [
                   Expanded(child: Text(fmtDateTime(e.capturedAt), style: T.tiny)),
-                  if (_editable) TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Borrar')),
-                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cerrar')),
+                  if (_editable && _store.files.exists(e.path))
+                    TextButton(onPressed: () => Navigator.pop(ctx, 'text'), child: const Text('Texto')),
+                  if (_editable) TextButton(onPressed: () => Navigator.pop(ctx, 'delete'), child: const Text('Borrar')),
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar')),
                 ],
               ),
             ),
@@ -313,6 +319,8 @@ class _FindingFormScreenState extends State<FindingFormScreen> {
         ),
       ),
     );
-    if (remove == true) await _store.removeEvidence(e);
+    if (action == 'delete') await _store.removeEvidence(e);
+    if (action != 'text' || !mounted) return;
+    if (await EvidenceActions.addText(context, e) && mounted) setState(() {});
   }
 }

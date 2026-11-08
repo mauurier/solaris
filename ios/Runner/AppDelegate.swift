@@ -12,5 +12,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // Marca de agua y 720p para los videos (lib/core/services/video_processing.dart).
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "VideoWatermarkPlugin") {
+      VideoWatermarkPlugin.register(with: registrar)
+    }
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/services/formatting.dart';
+import '../../core/services/maps.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
@@ -125,7 +126,15 @@ class _EvidenceViewerScreenState extends State<EvidenceViewerScreen> {
                       child: Text('El archivo ya no está en el teléfono', style: T.small),
                     )
                   : switch (e.kind) {
-                      EvidenceKind.photo || EvidenceKind.signature => InteractiveViewer(
+                      // Tocar la foto abre en Maps el lugar donde se tomó.
+                      EvidenceKind.photo => MapsPhoto(
+                          point: e.point,
+                          child: InteractiveViewer(
+                            maxScale: 6,
+                            child: Image.file(file, key: ValueKey(e.path), fit: BoxFit.contain),
+                          ),
+                        ),
+                      EvidenceKind.signature => InteractiveViewer(
                           maxScale: 6,
                           child: Image.file(file, key: ValueKey(e.path), fit: BoxFit.contain),
                         ),
@@ -147,14 +156,38 @@ class _EvidenceViewerScreenState extends State<EvidenceViewerScreen> {
                     },
             ),
           ),
+          if (widget.editable && exists && e.kind == EvidenceKind.photo) ...[
+            const SizedBox(height: 10),
+            AppButton(
+              'Agregar texto',
+              icon: Icons.text_fields_rounded,
+              kind: AppButtonKind.secondary,
+              expand: true,
+              onPressed: () async {
+                if (await EvidenceActions.addText(context, e) && mounted) setState(() {});
+              },
+            ),
+          ],
+          if (exists && e.kind == EvidenceKind.photo && e.point != null) ...[
+            const SizedBox(height: 8),
+            const Text('Toca la foto para ver en Maps dónde se tomó.', style: T.tiny, textAlign: TextAlign.center),
+          ],
           const SizedBox(height: 18),
           const SectionLabel('Metadatos'),
           GlassCard(
             child: Column(
               children: [
                 KeyValue('Fecha y hora', fmtStamp(e.capturedAt)),
-                KeyValue('Coordenadas', e.point?.label ?? (e.imported ? 'Importada' : 'Sin señal GPS'),
-                    icon: Icons.place_rounded, valueColor: e.point == null ? AppColors.warning : AppColors.blue),
+                GestureDetector(
+                  onTap: e.point == null ? null : () => openInMaps(context, e.point!),
+                  child: KeyValue(
+                      'Coordenadas',
+                      e.point == null
+                          ? (e.imported ? 'Importada sin ubicación' : 'Sin señal GPS')
+                          : '${e.point!.label} · abrir en Maps',
+                      icon: Icons.place_rounded,
+                      valueColor: e.point == null ? AppColors.warning : AppColors.blue),
+                ),
                 KeyValue('Capturó', e.user),
                 KeyValue('Origen', e.imported ? 'Importada · ${e.originalName}' : 'Cámara de Solaris'),
                 if (exists) KeyValue('Tamaño', fmtBytes(file.lengthSync())),

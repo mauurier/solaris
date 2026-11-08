@@ -165,6 +165,13 @@ class SyncService extends ChangeNotifier {
   static const _ownerKey = 'sync.usuario';
   static const _cursorPrefix = 'sync.desde.';
 
+  /// Visitas terminadas en este teléfono que pasan a revisión cuando suba lo
+  /// último que les falta. Se guardan antes de subir: si la sincronización se
+  /// corta (sin señal, app cerrada) después de subir lo último de una visita,
+  /// la siguiente la sigue revisando aunque ya no tenga nada pendiente. No se
+  /// borran al cerrar sesión: son trabajo del teléfono.
+  static const _reviewKey = 'sync.por_revisar';
+
   bool running = false;
   String? error;
   DateTime? lastPull;
@@ -287,7 +294,12 @@ class SyncService extends ChangeNotifier {
       final store = SurveyStore.instance;
       final files = await filesAllowed();
       final up = SyncPush(store, remote, allowFiles: files);
-      if (push) await up.run();
+      if (push) {
+        final toReview = {...?prefs.getStringList(_reviewKey), ...await up.visitsWithPending()};
+        await prefs.setStringList(_reviewKey, toReview.toList());
+        await up.run(toReview: toReview);
+        await prefs.setStringList(_reviewKey, up.reviewLater.toList());
+      }
       await _pull(prefs, store, up.refetch);
       if (files) await _download(store);
       waitingForWifi = up.waitingForWifi;

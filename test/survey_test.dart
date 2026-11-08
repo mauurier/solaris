@@ -721,10 +721,11 @@ void main() {
   });
 
   group('Marca de agua', () {
-    test('imprime fecha y GPS sin cambiar el tamaño de la foto', () {
+    test('imprime fecha, GPS y enlace de Maps sin cambiar el tamaño de la foto', () {
+      const point = GeoPoint(26.07346, -98.38151);
       final original = img.Image(width: 1200, height: 900)..clear(img.ColorRgb8(240, 240, 240));
       final stamped = img.decodeJpg(
-        stampBytes(img.encodeJpg(original), watermarkText(DateTime(2026, 9, 24, 10, 42, 15), const GeoPoint(26.07346, -98.38151))),
+        stampBytes(img.encodeJpg(original), watermarkLines(DateTime(2026, 9, 24, 10, 42, 15), point), gps: point),
       )!;
       expect(stamped.width, 1200);
       expect(stamped.height, 900);
@@ -733,12 +734,22 @@ void main() {
       final top = stamped.getPixel(40, 20);
       expect(corner.r, lessThan(top.r - 40));
       expect(top.r, greaterThan(220));
+
+      // Las coordenadas también van en el EXIF, para la galería y los mapas.
+      final gps = readExifGps(stamped.exif)!;
+      expect(gps.lat, closeTo(26.07346, 1e-5));
+      expect(gps.lng, closeTo(-98.38151, 1e-5));
+    });
+
+    test('el segundo renglón es el enlace de Maps de las mismas coordenadas', () {
+      final lines = watermarkLines(DateTime(2026, 9, 24, 8, 5, 3), const GeoPoint(26.07346, -98.38151));
+      expect(lines, ['24/09/2026 08:05:03  |  26.07346, -98.38151', 'maps.google.com/?q=26.07346,-98.38151']);
     });
 
     test('usa sólo caracteres que la fuente puede dibujar', () {
-      final text = watermarkText(DateTime(2026, 9, 24, 8, 5, 3), null);
-      expect(text, '24/09/2026 08:05:03  |  SIN GPS');
-      for (final c in text.codeUnits) {
+      expect(watermarkText(DateTime(2026, 9, 24, 8, 5, 3), null), '24/09/2026 08:05:03  |  SIN GPS');
+      final text = watermarkText(DateTime(2026, 9, 24, 8, 5, 3), const GeoPoint(-26.07346, 98.38151));
+      for (final c in text.replaceAll('\n', '').codeUnits) {
         expect(img.arial48.characters.containsKey(c), isTrue, reason: String.fromCharCode(c));
       }
     });

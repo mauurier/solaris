@@ -19,6 +19,12 @@ class GeoPoint {
 
   String get label => '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
 
+  /// Dirección corta de Google Maps, la que se imprime en la marca de agua.
+  String get mapsText => 'maps.google.com/?q=${lat.toStringAsFixed(5)},${lng.toStringAsFixed(5)}';
+
+  /// Enlace que abre estas coordenadas en Google Maps (app o navegador).
+  String get mapsUrl => 'https://$mapsText';
+
   Map<String, Object?> toJson() => {'lat': lat, 'lng': lng};
   static GeoPoint? fromJson(Object? j) {
     if (j is! Map) return null;

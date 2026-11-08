@@ -15,6 +15,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/app_state.dart';
 import '../../data/survey/entities.dart';
+import 'photo_text_editor.dart';
 import 'video_view.dart';
 
 enum CaptureMode { photo, video }
@@ -98,12 +99,22 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final c = _controller;
+    if (state == AppLifecycleState.resumed) {
+      // Sólo si se liberó al salir; si siguió grabando, la cámara es la misma.
+      if (c == null && _error == null) _initCamera();
+      return;
+    }
     if (c == null || !c.value.isInitialized) return;
-    if (state == AppLifecycleState.inactive) {
+    if (_recording) {
+      // Bajar el centro de control o recibir una notificación deja la app
+      // inactiva un momento: se sigue grabando. Si se va a segundo plano se
+      // guarda lo grabado en lugar de perderlo.
+      if (state == AppLifecycleState.paused) unawaited(_stopRecording());
+      return;
+    }
+    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
       c.dispose();
       _controller = null;
-    } else if (state == AppLifecycleState.resumed) {
-      _initCamera();
     }
   }
 
@@ -126,6 +137,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       );
       await c.initialize().timeout(const Duration(seconds: 15));
       await c.setFlashMode(_flash);
+      // En iOS prepara el audio antes de grabar; sin esto el arranque tarda y
+      // los primeros cuadros pueden salir sin sonido.
+      if (_video) await c.prepareForVideoRecording();
       if (!mounted) {
         await c.dispose();
         return;
@@ -176,7 +190,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       final at = DateTime.now();
       final point = _fix?.point;
       final out = await _tempFile('.jpg');
-      await stampPhoto(inputPath: shot.path, outputPath: out.path, text: watermarkText(at, point));
+      await stampPhoto(inputPath: shot.path, outputPath: out.path, lines: watermarkLines(at, point), gps: point);
       unawaited(File(shot.path).delete().catchError((_) => File(shot.path)));
       if (!mounted) return;
       setState(() {
@@ -198,18 +212,34 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     if (c == null || _busy) return;
     HapticFeedback.mediumImpact();
     if (!_recording) {
-      await c.startVideoRecording();
+      try {
+        await c.startVideoRecording();
+      } on CameraException catch (e) {
+        if (mounted) showAppSnack(context, 'No se pudo empezar a grabar (${e.code})', color: AppColors.danger);
+        return;
+      }
+      if (!mounted) return;
       setState(() {
         _recording = true;
         _recordStart = DateTime.now();
         _resultPoint = _fix?.point;
       });
-      _ticker = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
       return;
     }
+    await _stopRecording();
+  }
+
+  /// Detiene la grabación y deja el video listo para revisarlo. Si algo falla
+  /// avisa y vuelve a la cámara en lugar de quedarse colgada.
+  Future<void> _stopRecording() async {
+    final c = _controller;
+    if (c == null || !_recording || _busy) return;
+    _ticker?.cancel();
     setState(() => _busy = true);
     try {
-      _ticker?.cancel();
       final file = await c.stopVideoRecording();
       final out = await _tempFile(p.extension(file.path).isEmpty ? '.mp4' : p.extension(file.path));
       await File(file.path).rename(out.path).catchError((_) => File(file.path).copy(out.path));
@@ -219,6 +249,10 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
         _result = out;
         _resultAt = _recordStart;
       });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _recording = false);
+      showAppSnack(context, 'No se pudo guardar el video; intenta grabarlo de nuevo', color: AppColors.danger);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -231,6 +265,16 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       _result = null;
       _comment.clear();
     });
+  }
+
+  /// Escribe texto encima de la foto antes de aceptarla.
+  Future<void> _addText() async {
+    final f = _result;
+    if (f == null) return;
+    final edited = await PhotoTextEditor.open(context, f);
+    if (edited == null || !mounted) return;
+    unawaited(f.delete().catchError((_) => f));
+    setState(() => _result = edited);
   }
 
   void _accept() {
@@ -467,6 +511,17 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 ),
               ],
             ),
+            if (!_video) ...[
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _addText,
+                  icon: const Icon(Icons.text_fields_rounded, size: 18),
+                  label: const Text('Agregar texto'),
+                ),
+              ),
+            ],
             if (AppState.instance.commentPerPhoto) ...[
               const SizedBox(height: 10),
               TextField(

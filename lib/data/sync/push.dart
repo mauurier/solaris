@@ -1,3 +1,4 @@
+import '../models.dart';
 import '../storage/persistence.dart';
 import '../survey_store.dart';
 import 'remote_rows.dart';
@@ -57,13 +58,23 @@ class SyncPush {
 
   static const _answerKey = 'id_visita,clave_grupo,numero_repeticion,clave_pregunta';
 
-  Future<void> run() async {
-    // Visitas con algo que subir; si terminan subiendo todo, van a revisión.
-    final touched = {
-      for (final r in await store.db.pending(Tables.visits)) r.id,
-      for (final t in [Tables.answers, Tables.evidences])
-        for (final r in await store.db.pending(t)) ?r.parent,
-    };
+  /// Visitas con algo de este teléfono por subir: si terminan subiendo todo,
+  /// van a revisión.
+  Future<Set<String>> visitsWithPending() async => {
+        for (final r in await store.db.pending(Tables.visits)) r.id,
+        for (final t in [Tables.answers, Tables.evidences])
+          for (final r in await store.db.pending(t)) ?r.parent,
+      };
+
+  /// Visitas terminadas que aún esperan subir algo para pasar a revisión.
+  /// [SyncService] las guarda y se las vuelve a pasar a [run] la próxima vez.
+  final reviewLater = <String>{};
+
+  /// [toReview]: visitas que este teléfono debe mandar a revisión cuando ya
+  /// no les quede nada por subir; por omisión, las que hoy tienen pendientes.
+  /// Las que todavía esperan quedan en [reviewLater].
+  Future<void> run({Set<String>? toReview}) async {
+    final touched = toReview ?? await visitsWithPending();
     for (final t in [RemoteTable.projectTypes, RemoteTable.visitMotives, RemoteTable.templates, RemoteTable.clients]) {
       await _table(t);
     }
@@ -161,16 +172,23 @@ class SyncPush {
   }
 
   /// Visitas terminadas cuyo todo ya está arriba: pasan a revisión y se suben
-  /// otra vez la visita y el proyecto con su estado nuevo.
+  /// otra vez la visita y el proyecto con su estado nuevo. Las que aún
+  /// esperan algo quedan en [reviewLater].
   Future<void> _sendToReview(Set<String> visitIds) async {
     final waiting = {
       for (final t in [Tables.visits, Tables.answers, Tables.evidences])
         for (final r in await store.db.pending(t)) t == Tables.visits ? r.id : r.parent,
     };
     var moved = false;
-    for (final id in visitIds.difference(waiting).difference(_missing)) {
+    for (final id in visitIds) {
       final v = store.visit(id);
-      if (v != null && await store.sendToReview(v)) moved = true;
+      // Sin terminar, ya en revisión o aprobada: no le toca a este paso.
+      if (v == null || !v.finished || v.status != ProjectStatus.pendienteSync) continue;
+      if (waiting.contains(id) || _missing.contains(id)) {
+        reviewLater.add(id);
+      } else if (await store.sendToReview(v)) {
+        moved = true;
+      }
     }
     if (moved) {
       await _table(RemoteTable.projects, parent: 'siteId');

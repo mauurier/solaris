@@ -14,124 +14,9 @@ import 'package:proyecto_app/data/sync/sync_service.dart';
 import 'package:proyecto_app/features/sync/sync_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'fake_remote.dart';
 import 'fixtures/electric_template.dart';
 import 'test_helpers.dart';
-
-/// Servidor en memoria: tablas con filas en el formato de Supabase.
-class FakeRemote implements RemoteSource {
-  final tables = <String, List<RemoteRow>>{};
-
-  /// Ids que RLS deja ver al usuario, por tabla. Sin entrada: todos.
-  final visible = <String, Set<String>>{};
-
-  /// `since` con el que se pidió cada tabla la última vez.
-  final asked = <String, DateTime?>{};
-
-  List<RemoteRow> rows(String table) => tables.putIfAbsent(table, () => []);
-
-  bool _sees(RemoteTable t, RemoteRow r) {
-    final ids = visible[t.name];
-    if (ids == null) return true;
-    final id = t == RemoteTable.projectTechnicians ? r['id_proyecto'] : r['id'];
-    return ids.contains(id);
-  }
-
-  @override
-  Future<List<RemoteRow>> changed(RemoteTable t, DateTime? since) async {
-    asked[t.name] = since;
-    return rows(t.name)
-        .where((r) => _sees(t, r))
-        .where((r) => since == null || !DateTime.parse(r[t.timestamp] as String).isBefore(since))
-        .map(Map.of)
-        .toList();
-  }
-
-  @override
-  Future<List<RemoteRow>> where(RemoteTable t, String column, Iterable<String> ids) async =>
-      rows(t.name).where((r) => _sees(t, r) && ids.contains(r[column])).map(Map.of).toList();
-
-  @override
-  Future<Set<String>> visibleIds(RemoteTable t) async =>
-      {for (final r in rows(t.name).where((r) => _sees(t, r) && !RemoteRows.deleted(r))) r['id'] as String};
-
-  /// Escrituras en orden: `tabla:insert`, `tabla:update`, `tabla:upsert`.
-  final writes = <String>[];
-
-  /// Tablas donde RLS no deja cambiar filas.
-  final readOnly = <String>{};
-
-  /// Storage: `bucket/ruta` → contenido.
-  final files = <String, List<int>>{};
-
-  @override
-  Future<void> upload(String bucket, String path, File file, {required String contentType}) async {
-    _log(bucket, 'upload');
-    files['$bucket/$path'] = file.readAsBytesSync();
-  }
-
-  @override
-  Future<List<int>> download(String bucket, String path) async =>
-      files['$bucket/$path'] ?? (throw const RemoteRejected('Object not found'));
-
-  @override
-  Future<void> removeFile(String bucket, String path) async {
-    _log(bucket, 'remove');
-    files.remove('$bucket/$path');
-  }
-
-  /// Columnas de cada `update`, por tabla.
-  final updated = <String, List<Set<String>>>{};
-
-  /// Se llama en cada escritura, antes de aplicarla.
-  void Function(String table, String op)? onWrite;
-
-  var _ids = 0;
-  static String now() => DateTime.now().toUtc().toIso8601String();
-
-  void _log(String table, String op) {
-    writes.add('$table:$op');
-    onWrite?.call(table, op);
-  }
-
-  bool _matches(RemoteRow r, Map<String, Object?> match) => match.entries.every((m) => r[m.key] == m.value);
-
-  @override
-  Future<void> insert(RemoteTable t, RemoteRow row) async {
-    _log(t.name, 'insert');
-    rows(t.name).add({'creado_en': now(), 'eliminado_en': null, ...row, 'actualizado_en': now()});
-  }
-
-  @override
-  Future<void> update(RemoteTable t, Map<String, Object> match, RemoteRow values) async {
-    _log(t.name, 'update');
-    updated.putIfAbsent(t.name, () => []).add(values.keys.toSet());
-    final hits = rows(t.name).where((r) => _matches(r, match)).toList();
-    if (hits.isEmpty || readOnly.contains(t.name)) {
-      throw const RemoteRejected('No tienes permiso para cambiar este registro.');
-    }
-    for (final r in hits) {
-      r
-        ..addAll(values)
-        ..['actualizado_en'] = now();
-    }
-  }
-
-  @override
-  Future<void> upsert(RemoteTable t, List<RemoteRow> list, {required String onConflict}) async {
-    _log(t.name, 'upsert');
-    final cols = onConflict.split(',');
-    for (final row in list) {
-      final hit = rows(t.name).where((r) => _matches(r, {for (final c in cols) c: row[c]})).firstOrNull;
-      if (hit != null) {
-        hit
-          ..addAll(row)
-          ..['actualizado_en'] = now();
-      } else {
-        rows(t.name).add({'id': 'r${++_ids}', 'creado_en': now(), ...row, 'actualizado_en': now()});
-      }
-    }
-  }
-}
 
 const me = '11111111-1111-1111-1111-111111111111';
 const sup = '22222222-2222-2222-2222-222222222222';
@@ -384,6 +269,23 @@ void main() {
     }
   });
 
+  test('no manda a revisión una visita que cerró otro teléfono', () async {
+    // El técnico la cerró en su teléfono y todavía sube sus fotos: aquí llega
+    // "por sincronizar" sin nada que este teléfono deba subir.
+    server.rows('visita').single
+      ..['estado'] = 'pendiente_sync'
+      ..['fecha_fin'] = at(5)
+      ..['actualizado_en'] = at(5);
+    await SyncService.instance.sync();
+    await SyncService.instance.sync();
+    expect(SyncService.instance.error, isNull);
+
+    final v = store.visit(visitId)!;
+    expect(v.finished, isTrue);
+    expect(v.status, ProjectStatus.pendienteSync, reason: 'la pasa a revisión el teléfono que la cerró');
+    expect(server.rows('visita').single['estado'], 'pendiente_sync');
+  });
+
   group('Subida', () {
     setUp(() async {
       store = await initTestStore();
@@ -625,6 +527,37 @@ void main() {
       expect(p.status, ProjectStatus.enRevision);
       expect(server.rows('visita').single['estado'], 'en_revision');
       expect(server.rows('proyecto').single['estado'], 'en_revision');
+      expect(await pendingTables(), isEmpty);
+    });
+
+    test('si la sincronización se corta tras subir el cierre, la siguiente manda la visita a revisión', () async {
+      final p = await newProject();
+      final v = store.latestVisit(p.id)!;
+      await store.startVisit(v, null);
+      await store.addEvidence(visit: v, key: croquis, kind: EvidenceKind.photo, file: tempFile('croquis.jpg', [1]));
+      await sync();
+      expect(v.status, ProjectStatus.enCaptura);
+
+      // Se cierra la visita (sus fotos ya subieron) y hay un documento del
+      // proyecto por subir. Se pierde la señal justo en ese documento: el
+      // cierre de la visita ya quedó arriba, pero el paso a revisión no llegó.
+      await store.finishVisit(v, null);
+      await store.addDocument(p.id, 'recibo_cfe', tempFile('recibo.pdf', [7, 7]), 'recibo.pdf');
+      server.onWrite = (table, op) {
+        if (table == 'documentos' && op == 'upload') throw const SocketException('Sin señal');
+      };
+      await SyncService.instance.sync();
+      expect(SyncService.instance.error, isNotNull);
+      expect(server.rows('visita').single['estado'], 'pendiente_sync');
+      expect(await store.db.pending(Tables.visits), isEmpty, reason: 'el cierre sí subió');
+      expect(v.status, ProjectStatus.pendienteSync);
+
+      // Vuelve la señal: la visita ya no tiene nada pendiente, pero el
+      // teléfono recuerda que le falta pasar a revisión.
+      server.onWrite = null;
+      await sync();
+      expect(v.status, ProjectStatus.enRevision);
+      expect(server.rows('visita').single['estado'], 'en_revision');
       expect(await pendingTables(), isEmpty);
     });
 

@@ -15,16 +15,20 @@ de la app), así que se trabaja sin señal. Con conexión se sincroniza con
 | **Proyectos** | Alta en 4 pasos (datos, ubicación con GPS, equipo, plantilla y documentos iniciales). Al crear se genera la visita del técnico. Asignación de supervisor y técnicos, visitas adicionales y borrado (admin). |
 | **Documentos** | Recibo CFE, unifilar, ingeniería existente, planos, CAD y otros desde Archivos/iCloud/Drive. Si la plantilla los pide, cuentan como respondidos. |
 | **Levantamiento** | Inicio y cierre con hora y GPS. Formulario generado desde la plantilla: condicionales, bloques repetibles (Transformador 1, 2…; Tablero Principal, Tablero 01…), guardado automático, avance por sección y captura fuera de orden. |
-| **Cámara** | Cada foto lleva impresa la **fecha, hora y coordenadas** (o `SIN GPS`). Revisar, repetir, reemplazar, eliminar y comentar. Video narrado e importación de fotos/videos de dron o termografías; los videos se comprimen a 720p al guardarlos. |
+| **Cámara** | Cada foto y video lleva impresa la **fecha, hora, coordenadas** (o `SIN GPS`) y el **enlace de Google Maps** de esas coordenadas; en la app, tocar la foto abre Maps y el PDF también enlaza cada foto. Las fotos y videos de la galería se marcan con la hora y ubicación del momento en que se suben. Revisar, repetir, reemplazar, eliminar, comentar y **agregar texto encima** de las fotos. Los videos se procesan con el sistema (AVFoundation en iOS, Media3 en Android) para imprimir la marca y bajarlos a 720p. |
 | **Validación** | Pendientes obligatorios (bloquean el cierre), opcionales y justificados por el supervisor. Firma del técnico. |
 | **Plantillas** | Editor para el administrador: secciones, bloques, preguntas, tipo, obligatoriedad, condiciones, carpeta y prefijo de archivo. Cada guardado es una versión nueva; las visitas en curso conservan la suya. |
 | **Exportar ZIP** | Estructura `01`–`06` de *Instrucciones de llenado de carpetas*, nombres automáticos (`TABLERO_PRINCIPAL_ITM_001.jpg`, `RECIBO_CFE_SITIO.pdf`) y CSV de respuestas, mediciones y metadatos de cada evidencia. Se comparte con el menú nativo. |
 | **Cuentas** | Inicio de sesión con Supabase Auth. El superadmin crea las cuentas (Edge Function `crear-usuario`) y cambia rol, vigencia y si están activas. |
 | **Revisión** | El supervisor aprueba la visita terminada o pide correcciones concretas; el técnico las marca como atendidas y no puede cerrar hasta atenderlas todas. Cada revisión queda registrada con sus observaciones. |
 | **Hallazgos** | Problemas encontrados en la visita con código (HZ-001), categoría, severidad, ubicación, recomendación, GPS y fotos. Se les da seguimiento (abierto, en revisión, corregido; sólo quien revisa los cierra) y salen en el ZIP con su CSV. |
-| **Reporte PDF** | Por visita y sin conexión: portada, resumen con hallazgos por severidad, cada hallazgo con sus fotos y cada sección numerada (2.1.3) con su respuesta, casillas, escalas y fotos con autor y hora. Las fotos se reducen para que pese poco. Se comparte con el menú nativo. |
+| **Reporte PDF** | Por visita y sin conexión: portada, resumen con hallazgos por severidad, cada hallazgo con sus fotos y cada sección numerada (2.1.3) con su respuesta, casillas, escalas y fotos con autor, hora y enlace a Maps. Antes de generarlo se elige qué va: resumen, hallazgos, fotos, sólo lo respondido y qué secciones y bloques (Transformador 2, Tablero 01…). Se ve dentro de la app y se comparte con el menú nativo. |
 | **Historial** | Quién cambió qué y cuándo, por proyecto o de todo, leído del registro de Solaris (necesita conexión). |
 | **Sincronización** | Sube sólo lo que cambió en el teléfono y baja lo que cambió en el servidor; si dos personas cambian lo mismo gana el cambio más reciente. Fotos, videos y documentos van a Storage (opción "Sólo con Wi-Fi"). Es automática al volver la conexión, tras cada cambio y cada 10 minutos; Perfil › Sincronización muestra lo pendiente y los errores. |
+
+El video se procesa con código nativo propio, en `ios/Runner/VideoWatermark.swift` y
+`android/app/src/main/kotlin/com/example/proyecto_app/VideoWatermark.kt` (canal
+`solaris/video`), en lugar de un plugin.
 
 La tipografía del reporte PDF es Roboto (`assets/fonts`, licencia Apache 2.0 en
 `ROBOTO_LICENSE.txt`).
@@ -55,7 +59,8 @@ usa `sqflite_common_ffi` para abrir una base real en el escritorio.
 lib/
 ├── main.dart                   Abre la base local y arranca la app
 ├── core/
-│   ├── services/               GPS, marca de agua, exportación ZIP, formatos
+│   ├── services/               GPS, marca de agua, video, Maps, reporte PDF,
+│   │                           exportación ZIP, formatos
 │   ├── theme/                  Tokens de color, tipografía y ThemeData
 │   └── widgets/                Sistema de componentes
 ├── data/
@@ -69,7 +74,7 @@ lib/
 └── features/
     ├── projects/               Lista, alta, detalle, documentos y asignación
     ├── visits/                 Visita, secciones, preguntas, validación
-    ├── capture/                Cámara, visor de evidencias, video
+    ├── capture/                Cámara, visor de evidencias, video, editor de texto
     ├── export/                 Exportación ZIP (y vista previa anterior)
     ├── admin/                  Plantillas y su editor; usuarios, clientes y catálogos
     ├── sync/                   Pantalla de sincronización
