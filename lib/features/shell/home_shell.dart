@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
-import '../../data/mock_data.dart';
+import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../main.dart';
 import '../dashboard/dashboard_screen.dart';

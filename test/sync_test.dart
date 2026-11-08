@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:proyecto_app/data/auth/profile.dart';
 import 'package:proyecto_app/data/catalog.dart';
-import 'package:proyecto_app/data/mock_data.dart';
+import 'package:proyecto_app/data/app_state.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/storage/persistence.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
@@ -342,6 +342,19 @@ void main() {
     await SyncService.instance.pull();
     expect(store.files.file(e.path).readAsBytesSync(), [1, 2, 3]);
     expect(await store.db.pending(Tables.evidences), isEmpty);
+  });
+
+  test('baja el hallazgo con su estado', () async {
+    server.rows('hallazgo').add({'id': 'h1', 'id_visita': visitId, 'id_usuario': sup, 'codigo': 'HZ-001',
+        'categoria': 'seguridad', 'descripcion': 'Sin señalización', 'severidad': 'alta', 'ubicacion': null,
+        'recomendacion': 'Colocar letreros', 'estado': 'en_revision', 'latitud': 25.78, 'longitud': -100.18,
+        'creado_en': at(6), 'actualizado_en': at(6), 'eliminado_en': null});
+    await SyncService.instance.pull();
+    final f = store.findingsOf(visitId).single;
+    expect(f.category, FindingCategory.seguridad);
+    expect(f.status, FindingStatus.enRevision);
+    expect(f.recommendation, 'Colocar letreros');
+    expect(f.point!.lat, 25.78);
   });
 
   test('baja la revisión con sus correcciones', () async {
@@ -737,6 +750,27 @@ void main() {
       expect(server.updated['correccion'], [
         {'estado', 'atendida_en'}
       ]);
+      expect(await pendingTables(), isEmpty);
+    });
+
+    test('el hallazgo sube antes que su foto, que queda ligada a él', () async {
+      final p = await newProject();
+      final v = store.latestVisit(p.id)!;
+      await store.startVisit(v, null);
+      final f = await store.addFinding(v,
+          category: FindingCategory.termografico, severity: Severity.critica, description: 'Punto caliente');
+      await store.addEvidence(visit: v, findingId: f.id, kind: EvidenceKind.photo, file: tempFile('h.jpg', [9]));
+      f.status = FindingStatus.enRevision;
+      await store.updateFinding(f);
+      await sync();
+
+      final row = server.rows('hallazgo').single;
+      expect(row, allOf(containsPair('codigo', 'HZ-001'), containsPair('categoria', 'termografico'),
+          containsPair('severidad', 'critica'), containsPair('estado', 'en_revision'), containsPair('id_usuario', me)));
+      final photo = server.rows('evidencia').single;
+      expect(photo['id_hallazgo'], f.id);
+      expect(photo['clave_pregunta'], isNull);
+      expect(server.writes.indexOf('hallazgo:insert'), lessThan(server.writes.indexOf('evidencia:insert')));
       expect(await pendingTables(), isEmpty);
     });
 

@@ -160,7 +160,7 @@ class _ProjectBreakdownScreenState extends State<ProjectBreakdownScreen> {
     for (final e in list) {
       final v = _store.visit(e.visitId);
       if (v == null) continue;
-      final groupId = AnswerKey.parse(e.key).groupId;
+      final groupId = AnswerKey.tryParse(e.key)?.groupId;
       final section = _store
           .templateFor(v)
           .sections

@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../mock_data.dart';
+import '../app_state.dart';
 import '../remote_errors.dart';
 import '../models.dart';
 import 'auth_service.dart';
@@ -111,6 +111,22 @@ class UserDirectory extends ChangeNotifier {
       await _save();
       notifyListeners();
       return AppUser.fromProfile(profile);
+    } catch (e) {
+      throw AuthFailure(_message(e));
+    }
+  }
+
+  /// Pone una contraseña nueva a quien olvidó la suya (Edge Function
+  /// `cambiar-contrasena`, sólo para el superadmin).
+  Future<void> resetPassword(AppUser user, String password) async {
+    try {
+      await _client.functions
+          .invoke(
+            'cambiar-contrasena',
+            headers: await _authHeader(),
+            body: {'id_usuario': user.id, 'password': password},
+          )
+          .timeout(_timeout);
     } catch (e) {
       throw AuthFailure(_message(e));
     }

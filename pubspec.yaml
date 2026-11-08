@@ -49,6 +49,8 @@ dependencies:
   shared_preferences: ^2.5.6
   http: ^1.6.0
   connectivity_plus: ^7.3.1
+  pdf: ^3.13.1
+  video_compress: ^3.1.4
 
 dev_dependencies:
   flutter_test:
@@ -72,6 +74,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # Tipografía que se incrusta en el reporte PDF (Apache 2.0, ver ROBOTO_LICENSE.txt).
+  assets:
+    - assets/fonts/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

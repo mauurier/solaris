@@ -49,6 +49,10 @@ class RemoteTable {
           'eliminado_en');
   static const answers = RemoteTable('respuesta', Tables.answers,
       'id, id_visita, clave_grupo, numero_repeticion, clave_pregunta, valor, actualizado_en, eliminado_en');
+  static const findings = RemoteTable('hallazgo', Tables.findings,
+      'id, id_visita, id_usuario, codigo, categoria, descripcion, severidad, ubicacion, recomendacion, estado, '
+          'latitud, longitud, creado_en, actualizado_en, eliminado_en');
+
   /// Sin `actualizado_en` ni `eliminado_en`: una revisión no se edita.
   static const reviews = RemoteTable(
       'revision', Tables.reviews, 'id, id_visita, id_supervisor, decision, observaciones, creado_en',
@@ -64,8 +68,8 @@ class RemoteTable {
   static const evidences = RemoteTable(
       'evidencia',
       Tables.evidences,
-      'id, id_visita, id_usuario, clave_grupo, numero_repeticion, clave_pregunta, tipo, ruta_archivo, mime_type, '
-          'tamano, nombre_original, fecha_captura, latitud, longitud, comentario, importada, subido_en, '
+      'id, id_visita, id_usuario, id_hallazgo, clave_grupo, numero_repeticion, clave_pregunta, tipo, ruta_archivo, '
+          'mime_type, tamano, nombre_original, fecha_captura, latitud, longitud, comentario, importada, subido_en, '
           'actualizado_en, eliminado_en',
       bucket: 'evidencias');
 }
@@ -81,8 +85,10 @@ class RemoteRows {
   // ---------------------------------------------------------------- estados
 
   /// `enCaptura` ↔ `en_captura`.
-  static String statusToDb(ProjectStatus s) =>
-      s.name.replaceAllMapped(RegExp('[A-Z]'), (m) => '_${m[0]!.toLowerCase()}');
+  static String statusToDb(ProjectStatus s) => _snake(s.name);
+
+  static String _snake(String camel) => camel.replaceAllMapped(RegExp('[A-Z]'), (m) => '_${m[0]!.toLowerCase()}');
+  static String _camel(String snake) => snake.replaceAllMapped(RegExp('_([a-z])'), (m) => m[1]!.toUpperCase());
 
   static ProjectStatus statusFromDb(Object? v) =>
       ProjectStatus.values.where((s) => statusToDb(s) == v).firstOrNull ?? ProjectStatus.asignado;
@@ -175,6 +181,22 @@ class RemoteRows {
         'at': r['actualizado_en'],
       };
 
+  /// `en_revision` ↔ `enRevision`, como los estados de proyecto.
+  static Map<String, Object?> finding(Map<String, Object?> r) => {
+        'id': r['id'],
+        'visitId': r['id_visita'],
+        'userId': r['id_usuario'],
+        'code': r['codigo'],
+        'category': r['categoria'],
+        'severity': r['severidad'],
+        'description': r['descripcion'] ?? '',
+        'location': r['ubicacion'] ?? '',
+        'recommendation': r['recomendacion'] ?? '',
+        'status': _camel('${r['estado']}'),
+        'point': _point(r['latitud'], r['longitud']),
+        'createdAt': r['creado_en'],
+      };
+
   static Map<String, Object?> review(Map<String, Object?> r) => {
         'id': r['id'],
         'visitId': r['id_visita'],
@@ -232,6 +254,7 @@ class RemoteRows {
       'point': _point(r['latitud'], r['longitud']),
       'comment': r['comentario'] ?? '',
       'imported': r['importada'] ?? false,
+      'findingId': r['id_hallazgo'],
     };
   }
 
@@ -309,6 +332,19 @@ class RemoteRows {
             'justificaciones': j['justifications'] ?? const {},
           },
         Tables.answers => _answerToDb(j),
+        Tables.findings => {
+            'id_visita': j['visitId'],
+            'id_usuario': j['userId'],
+            'codigo': j['code'],
+            'categoria': j['category'],
+            'descripcion': j['description'],
+            'severidad': j['severity'],
+            'ubicacion': _text(j['location']),
+            'recomendacion': _text(j['recommendation']),
+            'estado': _snake('${j['status']}'),
+            ..._coords('latitud', 'longitud', j['point']),
+            'creado_en': _utc(j['createdAt']),
+          },
         Tables.reviews => {
             'id_visita': j['visitId'],
             'id_supervisor': j['supervisorId'],
@@ -345,6 +381,7 @@ class RemoteRows {
             ..._coords('latitud', 'longitud', j['point']),
             'comentario': _text(j['comment']),
             'importada': j['imported'] ?? false,
+            'id_hallazgo': j['findingId'],
           },
         _ => throw ArgumentError('Tabla sin subida: $localTable'),
       };

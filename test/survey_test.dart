@@ -155,6 +155,37 @@ void main() {
   });
 
   group('Store', () {
+    test('los hallazgos llevan código por visita y sus fotos se borran con ellos', () async {
+      final store = await initTestStore();
+      final proj = await seedProject(store, start: true);
+      final v = store.latestVisit(proj.id)!;
+      expect(() => store.addFinding(v, category: FindingCategory.otro, severity: Severity.baja, description: ' '),
+          throwsArgumentError);
+      final a = await store.addFinding(v,
+          category: FindingCategory.electrico, severity: Severity.alta, description: 'ITM sin etiqueta');
+      final b = await store.addFinding(v,
+          category: FindingCategory.cubierta, severity: Severity.critica, description: 'Lámina rota', location: 'Nave 2');
+      expect([a.code, b.code], ['HZ-001', 'HZ-002']);
+      expect(a.user, 'Juan Pérez');
+      expect(store.findingsOf(v.id), [b, a], reason: 'el más reciente primero');
+      expect(store.findingsFor(UserRole.tecnico, uid('Juan Pérez')), hasLength(2));
+      expect(store.findingsFor(UserRole.tecnico, uid('Diego Salas')), isEmpty, reason: 'no es su proyecto');
+
+      final photo = await store.addEvidence(visit: v, findingId: b.id, kind: EvidenceKind.photo, file: _jpeg(store.files.root, 'x.jpg'));
+      expect(photo.key, '', reason: 'no es de ninguna pregunta');
+      expect(store.evidenceOfFinding(b.id), [photo]);
+      expect(store.engineFor(v).overall.value, lessThan(1), reason: 'el motor la ignora sin tronar');
+
+      b.status = FindingStatus.corregido;
+      await store.updateFinding(b);
+      expect((await store.db.pending(Tables.findings)).firstWhere((r) => r.id == b.id).data['status'], 'corregido');
+
+      await store.deleteFinding(b);
+      expect(store.findingsOf(v.id), [a]);
+      expect(store.evidenceOfFinding(b.id), isEmpty);
+      expect(store.files.exists(photo.path), isFalse);
+    });
+
     test('el resumen del Perfil cuenta los levantamientos reales del usuario', () async {
       final store = await initTestStore();
       final p = await seedProject(store, start: true);
@@ -714,6 +745,21 @@ void main() {
   });
 
   group('Exportación', () {
+    test('las fotos de hallazgos van a Evidencias Adicionales y hay CSV de hallazgos', () async {
+      final store = await initTestStore();
+      final proj = await seedProject(store, start: true);
+      final v = store.latestVisit(proj.id)!;
+      final f = await store.addFinding(v,
+          category: FindingCategory.termografico, severity: Severity.critica, description: 'Punto caliente L2');
+      await store.addEvidence(visit: v, findingId: f.id, kind: EvidenceKind.photo, file: _jpeg(store.files.root, 'h.jpg'));
+
+      final plan = ExportService(store).plan(proj, now: DateTime(2026, 9, 24));
+      final paths = plan.entries.map((e) => e.path).toList();
+      expect(paths, contains('Evidencias Adicionales/HALLAZGO_HZ_001_001.jpg'));
+      final csv = plan.entries.firstWhere((e) => e.path.endsWith('HALLAZGOS_REY01202.csv')).text!;
+      expect(csv, allOf(contains('HZ-001'), contains('Termográfico'), contains('Crítica'), contains('Punto caliente L2')));
+    });
+
     test('slug quita acentos y caracteres especiales', () {
       expect(slug('Acometida, Medidor y Transformador'), 'ACOMETIDA_MEDIDOR_Y_TRANSFORMADOR');
       expect(slug('Tablero Principal'), 'TABLERO_PRINCIPAL');

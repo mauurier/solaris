@@ -6,7 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/auth/user_directory.dart';
 import '../../data/sync/sync_service.dart';
-import '../../data/mock_data.dart';
+import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../data/survey/entities.dart';
 import '../../data/survey_store.dart';
@@ -128,15 +128,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                                     title: all.isEmpty ? 'Aún no hay proyectos' : 'Sin coincidencias',
                                     message: all.isEmpty
                                         ? (canCreate
-                                            ? 'Crea el primero con el botón +. Podrás subir el recibo CFE, el unifilar y planos.'
+                                            ? 'Crea el primero con «Nuevo proyecto». Podrás subir el recibo CFE, el unifilar y planos.'
                                             : 'Cuando un supervisor te asigne un proyecto aparecerá aquí.')
                                         : 'Ningún proyecto coincide con la búsqueda o el filtro.',
-                                    action: all.isEmpty && canCreate
-                                        ? AppButton('Nuevo proyecto',
-                                            icon: Icons.add_rounded,
-                                            onPressed: () =>
-                                                push(context, const NewProjectScreen(), fullscreenDialog: true))
-                                        : null,
                                   ),
                                 ),
                               ),

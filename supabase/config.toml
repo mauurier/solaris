@@ -4,3 +4,6 @@ project_id = "gphsalcyqoxeactjbtzq"
 # funciona igual con las llaves nuevas sb_publishable / sb_secret.
 [functions.crear-usuario]
 verify_jwt = false
+
+[functions.cambiar-contrasena]
+verify_jwt = false

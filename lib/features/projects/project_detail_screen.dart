@@ -5,7 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/auth/user_directory.dart';
-import '../../data/mock_data.dart';
+import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../data/survey/entities.dart';
 import '../../data/survey/visit_engine.dart';
@@ -13,6 +13,7 @@ import '../../data/survey_store.dart';
 import '../../main.dart';
 import '../capture/evidence_viewer_screen.dart';
 import '../export/zip_export_screen.dart';
+import '../findings/findings_screen.dart';
 import '../history/history_screen.dart';
 import '../shell/home_shell.dart';
 import '../visits/new_visit_screen.dart';
@@ -123,6 +124,42 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   }
 
   // ------------------------------------------------------------------ resumen
+  List<Widget> _findingsCard() {
+    final app = AppState.instance;
+    final all = _store.findingsFor(app.role, app.userId, projectId: p.id);
+    if (all.isEmpty) return const [];
+    final open = all.where((f) => f.open).toList();
+    final critical = open.where((f) => f.severity == Severity.critica).length;
+    return [
+      const SizedBox(height: 14),
+      GlassCard(
+        onTap: () => push(context, FindingsScreen(project: p)),
+        borderColor: critical > 0 ? AppColors.danger.withValues(alpha: 0.35) : null,
+        child: Row(
+          children: [
+            const IconBadge(Icons.report_problem_rounded, color: AppColors.danger, size: 38),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Hallazgos', style: T.h3),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${open.length} abierto${open.length == 1 ? '' : 's'}'
+                    '${critical > 0 ? ' · $critical crítico${critical == 1 ? '' : 's'}' : ''} · ${all.length} en total',
+                    style: T.tiny,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    ];
+  }
+
   Widget _summary(FieldVisit? latest) {
     final template = _store.template(p.templateId);
     final progress = _store.progressOf(p);
@@ -188,6 +225,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             ],
           ),
         ),
+        ..._findingsCard(),
         const SizedBox(height: 20),
         const SectionLabel('Datos del proyecto'),
         GlassCard(
@@ -316,7 +354,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   ResolvedQuestion? _resolve(Evidence e) {
     final v = _store.visit(e.visitId);
     if (v == null) return null;
-    final key = AnswerKey.parse(e.key);
+    final key = AnswerKey.tryParse(e.key);
+    if (key == null) return null;
     final t = _store.templateFor(v);
     for (var si = 0; si < t.sections.length; si++) {
       for (var gi = 0; gi < t.sections[si].groups.length; gi++) {

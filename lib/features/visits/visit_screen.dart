@@ -5,7 +5,7 @@ import '../../core/services/location_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
-import '../../data/mock_data.dart';
+import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../data/survey/entities.dart';
 import '../../data/survey/template.dart';
@@ -13,6 +13,9 @@ import '../../data/survey/visit_engine.dart';
 import '../../data/survey_store.dart';
 import '../../main.dart';
 import '../export/zip_export_screen.dart';
+import '../findings/finding_form_screen.dart';
+import '../findings/findings_screen.dart';
+import '../report/report_screen.dart';
 import '../shell/home_shell.dart';
 import '../shell/quick_capture_sheet.dart';
 import 'review_sheet.dart';
@@ -82,9 +85,13 @@ class _VisitScreenState extends State<VisitScreen> {
           subtitle: '${v.label} · ${v.motive}',
           showGlow: true,
           actions: [
-            if (_canEdit)
+            if (v.started)
+              HeaderIconButton(Icons.picture_as_pdf_rounded, onTap: () => push(context, ReportScreen(visit: v))),
+            if (_canEdit) ...[
+              const SizedBox(width: 8),
               HeaderIconButton(Icons.add_a_photo_rounded,
                   color: AppColors.accent, onTap: () => showQuickCapture(context, visit: v)),
+            ],
           ],
           bottomBar: !v.started
               ? AppButton(
@@ -281,10 +288,47 @@ class _VisitScreenState extends State<VisitScreen> {
             ),
           ),
         ],
+        const SizedBox(height: 20),
+        _findings(),
         if (_store.reviewsOf(v.id).isNotEmpty) ...[
           const SizedBox(height: 20),
           ReviewHistory(visit: v, editable: _canEdit),
         ],
+      ],
+    );
+  }
+
+  Widget _findings() {
+    final list = _store.findingsOf(v.id);
+    final editable = canEditFindings(v);
+    if (list.isEmpty && !editable) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionLabel('Hallazgos · ${list.length}',
+            trailing: editable
+                ? GestureDetector(
+                    onTap: () => push(context, FindingFormScreen(visit: v)),
+                    child: Text('Registrar',
+                        style: T.small.copyWith(color: AppColors.accent, fontWeight: FontWeight.w600)),
+                  )
+                : null),
+        if (list.isEmpty)
+          GlassCard(
+            color: AppColors.surfaceAlt,
+            onTap: () => push(context, FindingFormScreen(visit: v)),
+            child: const Row(
+              children: [
+                IconBadge(Icons.report_problem_rounded, color: AppColors.danger, size: 38),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text('¿Encontraste un problema? Regístralo con su severidad y fotos.', style: T.tiny),
+                ),
+              ],
+            ),
+          ),
+        for (final f in list)
+          Padding(padding: const EdgeInsets.only(bottom: 10), child: FindingTile(finding: f)),
       ],
     );
   }

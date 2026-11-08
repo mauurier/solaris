@@ -5,6 +5,7 @@ import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/entities.dart';
 import 'package:proyecto_app/data/survey_store.dart';
 import 'package:proyecto_app/features/admin/template_editor_screen.dart';
+import 'package:proyecto_app/features/findings/finding_form_screen.dart';
 import 'package:proyecto_app/features/projects/new_project_screen.dart';
 import 'package:proyecto_app/features/projects/project_detail_screen.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
@@ -208,6 +209,28 @@ void main() {
     await tester.tap(find.text('Falta la foto de la placa'));
     await tester.pumpAndSettle();
     expect(find.text('Finalizar visita'), findsOneWidget);
+    expectNoRenderErrors(tester);
+  });
+
+  testWidgets('El técnico registra un hallazgo desde la visita y luego le agrega fotos', (tester) async {
+    final p = await seedProject(store, start: true);
+    final v = store.latestVisit(p.id)!;
+    await pumpPushed(tester, FindingFormScreen(visit: v));
+    await tester.tap(find.text('Seguridad'));
+    await tester.tap(find.text('Crítica'));
+    await tester.enterText(find.byType(TextField).first, 'Tablero sin tapa');
+    await tester.pump();
+    await tester.tap(find.text('Registrar hallazgo'));
+    await tester.pump(const Duration(seconds: 40)); // espera el GPS de prueba
+    await tester.pumpAndSettle();
+
+    final f = store.findingsOf(v.id).single;
+    expect(f.code, 'HZ-001');
+    expect(f.category, FindingCategory.seguridad);
+    expect(f.severity, Severity.critica);
+    expect(find.text('HZ-001'), findsOneWidget, reason: 'queda abierto el detalle');
+    expect(find.text('Cámara'), findsOneWidget);
+    expect(find.text('Cerrado'), findsNothing, reason: 'sólo quien revisa lo cierra');
     expectNoRenderErrors(tester);
   });
 

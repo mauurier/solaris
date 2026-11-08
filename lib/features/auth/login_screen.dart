@@ -8,7 +8,7 @@ import '../../core/widgets/ui.dart';
 import '../../data/auth/auth_service.dart';
 import '../../data/auth/user_directory.dart';
 import '../../data/sync/sync_service.dart';
-import '../../data/mock_data.dart';
+import '../../data/app_state.dart';
 import '../shell/home_shell.dart';
 import '../../main.dart';
 

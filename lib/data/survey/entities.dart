@@ -395,6 +395,76 @@ extension FieldVisitState on FieldVisit {
               : VisitState.finalizada;
 }
 
+/// Problema que se encontró en la visita (tabla `hallazgo`): con código
+/// propio de la visita (HZ-001), severidad y fotos. Se le da seguimiento
+/// hasta cerrarlo.
+class VisitFinding {
+  VisitFinding({
+    required this.id,
+    required this.visitId,
+    required this.code,
+    required this.category,
+    required this.severity,
+    required this.description,
+    required this.createdAt,
+    this.userId,
+    this.location = '',
+    this.recommendation = '',
+    this.status = FindingStatus.abierto,
+    this.point,
+  });
+
+  final String id;
+  final String visitId;
+
+  /// HZ-001, único dentro de la visita.
+  final String code;
+  FindingCategory category;
+  Severity severity;
+  String description;
+  String location;
+  String recommendation;
+  FindingStatus status;
+  final GeoPoint? point;
+  final DateTime createdAt;
+
+  /// Id de `perfil` de quien lo registró.
+  final String? userId;
+  String get user => _userName(userId);
+
+  bool get open => status != FindingStatus.cerrado;
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'visitId': visitId,
+        'code': code,
+        'category': category.name,
+        'severity': severity.name,
+        'description': description,
+        'location': location,
+        'recommendation': recommendation,
+        'status': status.name,
+        'point': point?.toJson(),
+        'createdAt': createdAt.toIso8601String(),
+        'userId': userId,
+      };
+
+  static VisitFinding fromJson(Map<String, Object?> j) => VisitFinding(
+        id: j['id'] as String,
+        visitId: j['visitId'] as String,
+        code: j['code'] as String,
+        category: FindingCategory.values.asNameMap()[j['category']] ?? FindingCategory.otro,
+        severity: Severity.values.asNameMap()[j['severity']] ?? Severity.media,
+        description: j['description'] as String? ?? '',
+        location: j['location'] as String? ?? '',
+        recommendation: j['recommendation'] as String? ?? '',
+        status: FindingStatus.values.asNameMap()[j['status']] ?? FindingStatus.abierto,
+        point: GeoPoint.fromJson(j['point']),
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        userId: j['userId'] as String?,
+      );
+}
+
 enum ReviewDecision { approved, corrections }
 
 /// Decisión del supervisor sobre una visita terminada (tabla `revision`). No
@@ -496,6 +566,7 @@ class Evidence {
     this.point,
     this.comment = '',
     this.imported = false,
+    this.findingId,
   });
 
   final String id;
@@ -521,6 +592,10 @@ class Evidence {
   /// por lo que no lleva marca de agua.
   bool imported;
 
+  /// Hallazgo al que pertenece; entonces no es de ninguna pregunta y [key]
+  /// queda vacía.
+  final String? findingId;
+
   Map<String, Object?> toJson() => {
         'id': id,
         'visitId': visitId,
@@ -534,6 +609,7 @@ class Evidence {
         'point': point?.toJson(),
         'comment': comment,
         'imported': imported,
+        'findingId': findingId,
       };
 
   static Evidence fromJson(Map<String, Object?> j) => Evidence(
@@ -549,6 +625,7 @@ class Evidence {
         point: GeoPoint.fromJson(j['point']),
         comment: j['comment'] as String? ?? '',
         imported: j['imported'] as bool? ?? false,
+        findingId: j['findingId'] as String?,
       );
 }
 
@@ -562,6 +639,9 @@ class AnswerKey {
 
   @override
   String toString() => '$groupId#$instance/$questionId';
+
+  /// Nula si [s] no es una clave (p. ej. la de una foto de hallazgo).
+  static AnswerKey? tryParse(String s) => s.contains('#') && s.contains('/') ? parse(s) : null;
 
   static AnswerKey parse(String s) {
     final hash = s.indexOf('#');

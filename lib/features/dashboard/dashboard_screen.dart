@@ -4,7 +4,7 @@ import '../../core/services/formatting.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/ui.dart';
-import '../../data/mock_data.dart';
+import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../data/survey/entities.dart';
 import '../../data/survey_store.dart';
@@ -43,7 +43,7 @@ class DashboardScreen extends StatelessWidget {
                 title: 'Hola, ${state.userName.split(' ').first}',
                 subtitle: state.role.label,
                 leading: InitialsAvatar(state.userInitials, size: 44, color: state.role.color),
-                actions: const [_OfflineChip()],
+                actions: const [ConnectionChip()],
               ),
               const SizedBox(height: 6),
               if (isField) _FieldCard(store: store, user: state.userId) else _PortfolioCard(projects: projects),
@@ -65,30 +65,6 @@ class DashboardScreen extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _OfflineChip extends StatelessWidget {
-  const _OfflineChip();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-      decoration: BoxDecoration(
-        color: AppColors.teal.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.teal.withValues(alpha: 0.3)),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.phone_iphone_rounded, size: 13, color: AppColors.teal),
-          SizedBox(width: 6),
-          Text('Offline', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.teal)),
-        ],
-      ),
     );
   }
 }

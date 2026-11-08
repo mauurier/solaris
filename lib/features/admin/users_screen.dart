@@ -9,7 +9,7 @@ import '../../core/widgets/ui.dart';
 import '../../data/auth/auth_service.dart';
 import '../../data/auth/profile.dart';
 import '../../data/auth/user_directory.dart';
-import '../../data/mock_data.dart';
+import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../shell/home_shell.dart';
 
@@ -208,10 +208,16 @@ class _UsersScreenState extends State<UsersScreen> {
     );
     if (created == null || !mounted) return;
     final (user, password) = created;
-    await showDialog<void>(
+    await _showCredentials(context, 'Cuenta creada', user, password);
+  }
+}
+
+/// Muestra una sola vez el correo y la contraseña para compartirlos.
+Future<void> _showCredentials(BuildContext context, String title, AppUser user, String password) =>
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cuenta creada'),
+        title: Text(title),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,7 +239,13 @@ class _UsersScreenState extends State<UsersScreen> {
         ],
       ),
     );
-  }
+
+/// Contraseña temporal de 12 caracteres, sin los que se confunden al
+/// dictarla (0/O, 1/l/I).
+String _newPassword() {
+  const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  final r = Random.secure();
+  return List.generate(12, (_) => chars[r.nextInt(chars.length)]).join();
 }
 
 const _roleOptions = ['Admin', 'Superv.', 'Técnico'];
@@ -303,6 +315,36 @@ class _UserSheetState extends State<_UserSheet> {
     }
   }
 
+  /// Para quien olvidó su contraseña: la anterior deja de servir.
+  Future<void> _resetPassword() async {
+    final user = widget.user;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Poner una contraseña nueva?'),
+        content: Text('${user.name} ya no podrá entrar con su contraseña actual. Se genera una temporal '
+            'para que se la compartas.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Cambiarla')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final password = _newPassword();
+    setState(() => _saving = true);
+    try {
+      await UserDirectory.instance.resetPassword(user, password);
+      if (!mounted) return;
+      await _showCredentials(context, 'Contraseña nueva', user, password);
+      if (mounted) Navigator.pop(context);
+    } on AuthFailure catch (e) {
+      if (mounted) showAppSnack(context, e.message, icon: Icons.error_outline_rounded, color: AppColors.danger);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = _p;
@@ -338,6 +380,14 @@ class _UserSheetState extends State<_UserSheet> {
               icon: Icons.check_rounded,
               expand: true,
               onPressed: _saving ? null : _save,
+            ),
+            const SizedBox(height: 10),
+            AppButton(
+              'Nueva contraseña',
+              icon: Icons.key_rounded,
+              kind: AppButtonKind.secondary,
+              expand: true,
+              onPressed: _saving ? null : _resetPassword,
             ),
             const SizedBox(height: 22),
           ] else ...[
@@ -412,19 +462,12 @@ class _NewUserSheet extends StatefulWidget {
 class _NewUserSheetState extends State<_NewUserSheet> {
   final _name = TextEditingController();
   final _email = TextEditingController();
-  final _password = TextEditingController(text: _generatePassword());
+  final _password = TextEditingController(text: _newPassword());
   String _role = 'tecnico';
   DateTime _start = _today();
   DateTime? _end;
   bool _saving = false;
   String? _error;
-
-  static String _generatePassword() {
-    // Sin caracteres que se confunden al dictarla (0/O, 1/l/I).
-    const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    final r = Random.secure();
-    return List.generate(12, (_) => chars[r.nextInt(chars.length)]).join();
-  }
 
   @override
   void dispose() {
@@ -503,7 +546,7 @@ class _NewUserSheetState extends State<_NewUserSheet> {
               suffixIcon: IconButton(
                 tooltip: 'Generar otra',
                 icon: const Icon(Icons.refresh_rounded, size: 19),
-                onPressed: () => setState(() => _password.text = _generatePassword()),
+                onPressed: () => setState(() => _password.text = _newPassword()),
               ),
             ),
           ),

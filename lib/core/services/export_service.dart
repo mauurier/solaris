@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 
+import '../../data/models.dart';
 import '../../data/survey/entities.dart';
 import '../../data/survey/template.dart';
 import '../../data/survey/visit_engine.dart';
@@ -106,19 +107,24 @@ class ExportService {
     for (final v in visits) {
       final template = store.templateFor(v);
       for (final e in store.evidenceOf(v.id)) {
-        final key = AnswerKey.parse(e.key);
-        final located = _locate(template, key);
+        final key = AnswerKey.tryParse(e.key);
+        final located = key == null ? null : _locate(template, key);
+        final finding = store.findings.where((f) => f.id == e.findingId).firstOrNull;
         String folder;
         String base;
         String question;
         String instance = '';
-        if (located == null) {
+        if (finding != null) {
+          folder = Folders.adicionales;
+          base = 'HALLAZGO_${slug(finding.code, max: 12)}';
+          question = 'Hallazgo ${finding.code}: ${finding.description}';
+        } else if (located == null) {
           folder = Folders.adicionales;
           base = 'EVIDENCIA';
           question = e.key;
         } else {
           final (group, q) = located;
-          instance = group.instanceName(key.instance);
+          instance = group.instanceName(key!.instance);
           folder = (q.folder.isEmpty ? Folders.adicionales : q.folder).replaceAll('{INSTANCIA}', instance);
           final prefix = q.prefix.isEmpty ? slug(q.label, max: 30) : q.prefix;
           base = slug(prefix.replaceAll('{INSTANCIA}', instance), max: 60);
@@ -154,6 +160,45 @@ class ExportService {
     final measures = _measurementsCsv(visits.where((v) => v.started).toList());
     if (measures != null) {
       entries.add(ExportEntry.text('${Folders.reporte}/MEDICIONES_$code.csv', measures));
+    }
+    final findings = [for (final v in visits) ...store.findingsOf(v.id).reversed];
+    if (findings.isNotEmpty) {
+      entries.add(ExportEntry.text(
+        '${Folders.reporte}/HALLAZGOS_$code.csv',
+        _csv([
+          [
+            'Código',
+            'Visita',
+            'Categoría',
+            'Severidad',
+            'Estado',
+            'Descripción',
+            'Ubicación',
+            'Recomendación',
+            'Registró',
+            'Fecha y hora',
+            'Latitud',
+            'Longitud',
+            'Fotos',
+          ],
+          for (final f in findings)
+            [
+              f.code,
+              store.visit(f.visitId)?.label ?? '',
+              f.category.label,
+              f.severity.label,
+              f.status.label,
+              f.description,
+              f.location,
+              f.recommendation,
+              f.user,
+              fmtStamp(f.createdAt),
+              f.point?.lat.toStringAsFixed(6) ?? '',
+              f.point?.lng.toStringAsFixed(6) ?? '',
+              '${store.evidenceOfFinding(f.id).length}',
+            ],
+        ]),
+      ));
     }
     if (evidenceRows.isNotEmpty) {
       entries.add(ExportEntry.text(

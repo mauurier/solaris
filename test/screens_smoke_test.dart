@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:proyecto_app/features/report/report_screen.dart';
 import 'package:proyecto_app/data/history.dart';
 
 import 'test_helpers.dart';
 
-import 'package:proyecto_app/data/mock_data.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/survey/template.dart';
 import 'package:proyecto_app/data/survey_store.dart';
@@ -15,7 +15,6 @@ import 'package:proyecto_app/features/admin/templates_screen.dart';
 import 'package:proyecto_app/features/admin/users_screen.dart';
 import 'package:proyecto_app/features/auth/login_screen.dart';
 import 'package:proyecto_app/features/capture/camera_screen.dart';
-import 'package:proyecto_app/features/export/export_screen.dart';
 import 'package:proyecto_app/features/export/zip_export_screen.dart';
 import 'package:proyecto_app/features/findings/finding_form_screen.dart';
 import 'package:proyecto_app/features/findings/findings_screen.dart';
@@ -24,7 +23,6 @@ import 'package:proyecto_app/features/profile/profile_screen.dart';
 import 'package:proyecto_app/features/projects/new_project_screen.dart';
 import 'package:proyecto_app/features/projects/project_detail_screen.dart';
 import 'package:proyecto_app/features/projects/projects_screen.dart';
-import 'package:proyecto_app/features/report/report_preview_screen.dart';
 import 'package:proyecto_app/features/shell/home_shell.dart';
 import 'package:proyecto_app/features/sync/sync_screen.dart';
 import 'package:proyecto_app/features/visits/new_visit_screen.dart';
@@ -43,8 +41,6 @@ void main() {
     await seedProject(store, start: true); // visita en curso
     historySource = _NoHistory();
   });
-
-  final mock = Mock.projects.first;
 
   // Pantallas conectadas a datos reales.
   final real = <String, Widget Function(SurveyStore s)>{
@@ -71,6 +67,13 @@ void main() {
         ),
     'Perfil': (_) => const ProfileScreen(),
     'Acceso': (_) => const LoginScreen(),
+    'Hallazgos': (_) => const FindingsScreen(),
+    'Reporte PDF': (s) => ReportScreen(visit: s.visits.firstWhere((v) => v.started)),
+    'Nuevo hallazgo': (s) => FindingFormScreen(visit: s.visits.firstWhere((v) => v.started)),
+    'Sincronización': (_) => const SyncScreen(),
+    'Historial': (_) => const HistoryScreen(),
+    'Usuarios': (_) => const UsersScreen(),
+    'Clientes': (_) => const ClientsScreen(),
   };
 
   for (final entry in real.entries) {
@@ -97,24 +100,6 @@ void main() {
     });
   }
 
-  // Módulos de vista previa que siguen con datos de ejemplo.
-  final previews = <String, Widget Function()>{
-    'Reporte': () => ReportPreviewScreen(project: mock),
-    'Exportar (vista previa)': () => ExportScreen(project: mock),
-    'Hallazgos': () => const FindingsScreen(),
-    'Detalle de hallazgo': () => FindingFormScreen(finding: Mock.findings.first),
-    'Sincronización': () => const SyncScreen(),
-    'Historial': () => const HistoryScreen(),
-    'Usuarios': () => const UsersScreen(),
-    'Clientes': () => const ClientsScreen(),
-  };
-
-  for (final entry in previews.entries) {
-    testWidgets('Se dibuja sin errores: ${entry.key}', (tester) async {
-      await pumpOnPhone(tester, entry.value());
-      expectNoRenderErrors(tester);
-    });
-  }
 }
 
 /// Historial vacío: las pruebas no tienen Solaris.

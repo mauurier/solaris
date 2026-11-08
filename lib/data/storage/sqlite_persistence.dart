@@ -25,7 +25,8 @@ class SqlitePersistence implements Persistence {
   /// 7: se quitó el modo demo. Lo que se capturó en él lleva ids de personas
   ///    de ejemplo (`demo-…`) que no existen en el servidor, y se borra.
   /// 8: tablas `reviews` y `corrections` (revisión del supervisor).
-  static const _version = 8;
+  /// 9: tabla `findings` (hallazgos).
+  static const _version = 9;
   static const _builtInTemplate = '015c2871-6002-4d95-94ca-8e95d12e8b35';
 
   static Future<void> _createTable(DatabaseExecutor db, String t) async {

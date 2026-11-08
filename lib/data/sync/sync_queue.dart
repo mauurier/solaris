@@ -84,6 +84,11 @@ Future<List<SyncQueueItem>> loadSyncQueue(SurveyStore store) async {
         r.data['attendedAt'] == null ? 'Corrección pedida' : 'Corrección atendida'));
   }
 
+  for (final r in await store.db.pending(Tables.findings)) {
+    out.add(item(Tables.findings, r, 'Hallazgo', '${r.data['code']} · ${r.data['description']}',
+        'Hallazgo · ${visitLabel(r.data['visitId'] as String?)}'));
+  }
+
   final answers = <String, List<PendingRow>>{};
   for (final r in await store.db.pending(Tables.answers)) {
     answers.putIfAbsent(r.parent ?? '', () => []).add(r);

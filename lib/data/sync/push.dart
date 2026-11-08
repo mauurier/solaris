@@ -19,7 +19,7 @@ enum _Result {
 
 /// Sube lo que cambió en el teléfono, en el orden de las llaves foráneas:
 /// catálogos y plantillas, cliente, sitio, proyecto con sus técnicos, visita,
-/// revisiones y correcciones, respuestas, documentos y evidencias. De estos dos últimos primero sube el
+/// revisiones y correcciones, hallazgos, respuestas, documentos y evidencias. De estos dos últimos primero sube el
 /// archivo a Storage y después la fila con `subido_en`: una fila en el
 /// servidor siempre tiene su archivo. Al final, las visitas terminadas que ya
 /// subieron todo pasan a revisión.
@@ -72,6 +72,7 @@ class SyncPush {
     await _table(RemoteTable.visits, parent: 'projectId');
     await _table(RemoteTable.reviews, parent: 'visitId');
     await _table(RemoteTable.corrections, parent: 'reviewId');
+    await _table(RemoteTable.findings, parent: 'visitId');
     await _answers();
     await _table(RemoteTable.documents, parent: 'projectId');
     await _table(RemoteTable.evidences, parent: 'visitId');

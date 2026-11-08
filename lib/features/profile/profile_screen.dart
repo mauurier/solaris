@@ -5,7 +5,7 @@ import '../../core/services/formatting.dart';
 import '../../core/widgets/ui.dart';
 import '../../data/auth/auth_service.dart';
 import '../../data/auth/user_directory.dart';
-import '../../data/mock_data.dart';
+import '../../data/app_state.dart';
 import '../../data/models.dart';
 import '../../data/survey_store.dart';
 import '../../main.dart';
@@ -16,7 +16,6 @@ import '../auth/login_screen.dart';
 import '../history/history_screen.dart';
 import '../shell/home_shell.dart';
 import '../findings/findings_screen.dart';
-import '../report/report_preview_screen.dart';
 import '../sync/sync_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -181,6 +180,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Divider(indent: 14, endIndent: 14),
                   NavRow(
                     dense: true,
+                    title: 'Hallazgos',
+                    subtitle: 'Problemas encontrados en las visitas y su seguimiento',
+                    icon: Icons.report_problem_rounded,
+                    iconColor: AppColors.danger,
+                    onTap: () => push(context, const FindingsScreen()),
+                  ),
+                  const Divider(indent: 14, endIndent: 14),
+                  NavRow(
+                    dense: true,
                     title: 'Historial de actividad',
                     subtitle: 'Quién cambió qué y cuándo, según Solaris',
                     icon: Icons.history_rounded,
@@ -220,32 +228,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 22),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
-            child: SectionLabel('Vista previa · próximas fases'),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: GlassCard(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Column(
-                children: [
-                  for (final (i, m) in _previews.indexed) ...[
-                    if (i > 0) const Divider(indent: 14, endIndent: 14),
-                    NavRow(
-                      dense: true,
-                      title: m.$1,
-                      subtitle: 'Datos de ejemplo',
-                      icon: m.$2,
-                      iconColor: AppColors.textMuted,
-                      onTap: () => push(context, m.$3()),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 22),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: AppButton(
@@ -275,11 +257,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
 
-  /// Módulos del prototipo que aún no se conectan a datos reales.
-  static final _previews = <(String, IconData, Widget Function())>[
-    ('Reporte PDF', Icons.picture_as_pdf_rounded, () => ReportPreviewScreen(project: Mock.active)),
-    ('Hallazgos', Icons.report_problem_rounded, () => const FindingsScreen()),
-  ];
 
   Widget _switchRow(IconData i, String title, String sub, bool value, ValueChanged<bool>? onChanged) {
     return Padding(

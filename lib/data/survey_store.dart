@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -6,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
 import 'catalog.dart';
-import 'mock_data.dart';
+import 'app_state.dart';
 import 'models.dart';
 import 'storage/file_store.dart';
 import 'storage/persistence.dart';
@@ -88,6 +89,7 @@ class SurveyStore extends ChangeNotifier {
   final evidences = <Evidence>[];
   final reviews = <VisitReview>[];
   final corrections = <Correction>[];
+  final findings = <VisitFinding>[];
 
   /// Valores con los que arranca cada catálogo en una instalación nueva. Los
   /// ids son los de la semilla de la migración en Supabase.
@@ -133,6 +135,7 @@ class SurveyStore extends ChangeNotifier {
     evidences.addAll((await db.load(Tables.evidences)).map(Evidence.fromJson));
     reviews.addAll((await db.load(Tables.reviews)).map(VisitReview.fromJson));
     corrections.addAll((await db.load(Tables.corrections)).map(Correction.fromJson));
+    findings.addAll((await db.load(Tables.findings)).map(VisitFinding.fromJson));
     for (final row in await db.load(Tables.answers)) {
       _answers.putIfAbsent(row['visitId'] as String, () => {})[row['key'] as String] = row['value'] as String;
     }
@@ -352,6 +355,7 @@ class SurveyStore extends ChangeNotifier {
       // Las revisiones no se borran en el servidor: quedan con la visita borrada.
       await db.forgetByParent(Tables.reviews, v.id);
       await db.forgetByParent(Tables.corrections, v.id);
+      await db.removeByParent(Tables.findings, v.id);
       _answers.remove(v.id);
     }
     await db.removeByParent(Tables.visits, proj.id);
@@ -363,6 +367,7 @@ class SurveyStore extends ChangeNotifier {
     final gone = {for (final v in visits.where((v) => v.projectId == proj.id)) v.id};
     reviews.removeWhere((r) => gone.contains(r.visitId));
     corrections.removeWhere((c) => gone.contains(c.visitId));
+    findings.removeWhere((f) => gone.contains(f.visitId));
     projects.remove(proj);
     await files.deleteDir(p.join('media', proj.id));
     notifyListeners();
@@ -558,6 +563,72 @@ class SurveyStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------------------------------------------------------------- hallazgos
+
+  /// Hallazgos de la visita, del más reciente al más antiguo.
+  List<VisitFinding> findingsOf(String visitId) =>
+      findings.where((f) => f.visitId == visitId).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  /// Hallazgos de los proyectos que ve el usuario; con [projectId], sólo los
+  /// de ese proyecto.
+  List<VisitFinding> findingsFor(UserRole role, String userId, {String? projectId}) {
+    final ids = {for (final pr in projectsFor(role, userId)) if (projectId == null || pr.id == projectId) pr.id};
+    final visitIds = {for (final v in visits) if (ids.contains(v.projectId)) v.id};
+    return findings.where((f) => visitIds.contains(f.visitId)).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  List<Evidence> evidenceOfFinding(String findingId) =>
+      evidences.where((e) => e.findingId == findingId).toList()..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+
+  /// Registra un hallazgo con el siguiente código de la visita (HZ-001, HZ-002…).
+  Future<VisitFinding> addFinding(
+    FieldVisit v, {
+    required FindingCategory category,
+    required Severity severity,
+    required String description,
+    String location = '',
+    String recommendation = '',
+    GeoPoint? point,
+  }) async {
+    if (description.trim().isEmpty) throw ArgumentError('Describe el hallazgo');
+    final last = findingsOf(v.id).map((f) => int.tryParse(f.code.replaceAll(RegExp(r'\D'), '')) ?? 0).fold(0, max);
+    final f = VisitFinding(
+      id: _uuid.v4(),
+      visitId: v.id,
+      code: 'HZ-${(last + 1).toString().padLeft(3, '0')}',
+      category: category,
+      severity: severity,
+      description: description.trim(),
+      location: location.trim(),
+      recommendation: recommendation.trim(),
+      point: point,
+      createdAt: DateTime.now(),
+      userId: _userId,
+    );
+    findings.add(f);
+    await db.put(Tables.findings, f.id, f.toJson(), parent: v.id);
+    await _touch(v.projectId);
+    notifyListeners();
+    return f;
+  }
+
+  Future<void> updateFinding(VisitFinding f) async {
+    await db.put(Tables.findings, f.id, f.toJson(), parent: f.visitId);
+    await _touch(visit(f.visitId)?.projectId ?? '');
+    notifyListeners();
+  }
+
+  /// Borra el hallazgo y sus fotos.
+  Future<void> deleteFinding(VisitFinding f) async {
+    for (final e in evidenceOfFinding(f.id)) {
+      await _deleteEvidence(e);
+    }
+    findings.remove(f);
+    await db.remove(Tables.findings, f.id);
+    notifyListeners();
+  }
+
   /// El supervisor devuelve la visita al técnico con lo que debe corregir:
   /// queda abierta otra vez y no se puede cerrar hasta atender todo.
   Future<void> requestCorrections(FieldVisit v, {required List<String> items, String notes = ''}) async {
@@ -682,9 +753,11 @@ class SurveyStore extends ChangeNotifier {
   List<Evidence> evidenceOfProject(String projectId) =>
       evidences.where((e) => e.projectId == projectId).toList()..sort((a, b) => b.capturedAt.compareTo(a.capturedAt));
 
+  /// Sin [key] es una foto de hallazgo ([findingId]).
   Future<Evidence> addEvidence({
     required FieldVisit visit,
-    required AnswerKey key,
+    AnswerKey? key,
+    String? findingId,
     required EvidenceKind kind,
     required File file,
     String originalName = '',
@@ -701,7 +774,8 @@ class SurveyStore extends ChangeNotifier {
       id: id,
       visitId: visit.id,
       projectId: visit.projectId,
-      key: key.toString(),
+      key: key?.toString() ?? '',
+      findingId: findingId,
       kind: kind,
       path: rel,
       capturedAt: capturedAt ?? DateTime.now(),
@@ -777,6 +851,7 @@ class SurveyStore extends ChangeNotifier {
       (Tables.evidences, visitIds),
       (Tables.reviews, visitIds),
       (Tables.corrections, visitIds),
+      (Tables.findings, visitIds),
     ]) {
       if ((await db.pending(table)).any((r) => parents.contains(r.parent))) return true;
     }
@@ -842,7 +917,7 @@ class SurveyStore extends ChangeNotifier {
         projects.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       case Tables.visits:
         final pendingChildren = {
-          for (final t in [Tables.answers, Tables.evidences, Tables.reviews, Tables.corrections])
+          for (final t in [Tables.answers, Tables.evidences, Tables.reviews, Tables.corrections, Tables.findings])
             ...(await db.pending(t)).map((r) => r.parent),
         };
         for (final r in fresh) {
@@ -900,6 +975,16 @@ class SurveyStore extends ChangeNotifier {
           }
           await db.forget(table, id);
         }
+      case Tables.findings:
+        for (final r in fresh) {
+          final f = VisitFinding.fromJson(r);
+          _replace(findings, f, (x) => x.id);
+          await db.put(table, f.id, r, parent: f.visitId, pending: false);
+        }
+        for (final id in gone) {
+          findings.removeWhere((f) => f.id == id);
+          await db.forget(table, id);
+        }
       case Tables.reviews:
         for (final r in fresh) {
           final review = VisitReview.fromJson(r);
@@ -941,13 +1026,14 @@ class SurveyStore extends ChangeNotifier {
   }
 
   Future<void> _forgetVisit(String id) async {
-    for (final t in [Tables.answers, Tables.evidences, Tables.reviews, Tables.corrections]) {
+    for (final t in [Tables.answers, Tables.evidences, Tables.reviews, Tables.corrections, Tables.findings]) {
       await db.forgetByParent(t, id);
     }
     await db.forget(Tables.visits, id);
     _answers.remove(id);
     reviews.removeWhere((r) => r.visitId == id);
     corrections.removeWhere((c) => c.visitId == id);
+    findings.removeWhere((f) => f.visitId == id);
     for (final e in evidences.where((e) => e.visitId == id).toList()) {
       evidences.remove(e);
       await files.delete(e.path);

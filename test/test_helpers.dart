@@ -7,7 +7,7 @@ import 'package:proyecto_app/core/theme/app_theme.dart';
 import 'package:proyecto_app/data/auth/profile.dart';
 import 'package:proyecto_app/data/auth/user_directory.dart';
 import 'package:proyecto_app/data/catalog.dart';
-import 'package:proyecto_app/data/mock_data.dart';
+import 'package:proyecto_app/data/app_state.dart';
 import 'package:proyecto_app/data/models.dart';
 import 'package:proyecto_app/data/storage/file_store.dart';
 import 'package:proyecto_app/data/storage/persistence.dart';

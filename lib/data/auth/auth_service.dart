@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config/supabase_config.dart';
-import '../mock_data.dart';
+import '../app_state.dart';
 import '../sync/sync_service.dart';
 import 'profile.dart';
 import 'user_directory.dart';

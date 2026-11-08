@@ -119,6 +119,22 @@ extension VisitStateX on VisitState {
       };
 }
 
+/// Categorías de la tabla `hallazgo` (enum `categoria_hallazgo`).
+enum FindingCategory { electrico, estructural, cubierta, seguridad, termografico, documental, civil, otro }
+
+extension FindingCategoryX on FindingCategory {
+  String get label => switch (this) {
+        FindingCategory.electrico => 'Eléctrico',
+        FindingCategory.estructural => 'Estructural',
+        FindingCategory.cubierta => 'Cubierta',
+        FindingCategory.seguridad => 'Seguridad',
+        FindingCategory.termografico => 'Termográfico',
+        FindingCategory.documental => 'Documental',
+        FindingCategory.civil => 'Civil',
+        FindingCategory.otro => 'Otro',
+      };
+}
+
 enum Severity { baja, media, alta, critica }
 
 extension SeverityX on Severity {
@@ -192,115 +208,6 @@ class AppUser {
     final s = profile.statusOn(DateTime.now());
     return s == AccountStatus.ok || s == AccountStatus.notStarted;
   }
-}
-
-class Indicator {
-  Indicator(this.label, this.value, this.color, this.icon);
-  final String label;
-  double value;
-  final Color color;
-  final IconData icon;
-}
-
-class Project {
-  Project({
-    required this.id,
-    required this.name,
-    required this.client,
-    required this.type,
-    required this.site,
-    required this.address,
-    required this.coords,
-    required this.responsible,
-    required this.supervisor,
-    required this.technicians,
-    required this.createdAt,
-    required this.scheduledAt,
-    required this.status,
-    required this.progress,
-    required this.indicators,
-    required this.lastActivity,
-    this.description = '',
-    this.criticalFindings = 0,
-    this.pendings = 0,
-    this.visits = const [],
-  });
-
-  final String id;
-  final String name;
-  final String client;
-  final String type;
-  final String site;
-  final String address;
-  final String coords;
-  final String responsible;
-  final String supervisor;
-  final List<String> technicians;
-  final String createdAt;
-  final String scheduledAt;
-  ProjectStatus status;
-  double progress;
-  final List<Indicator> indicators;
-  final String lastActivity;
-  final String description;
-  final int criticalFindings;
-  final int pendings;
-  final List<Visit> visits;
-}
-
-class Visit {
-  Visit({
-    required this.id,
-    required this.date,
-    required this.start,
-    required this.end,
-    required this.technician,
-    required this.supervisor,
-    required this.type,
-    required this.motive,
-    required this.status,
-    required this.progress,
-    this.locationStart = '25.6866, -100.3161',
-    this.locationEnd = '25.6866, -100.3161',
-  });
-
-  final String id;
-  final String date;
-  final String start;
-  final String end;
-  final String technician;
-  final String supervisor;
-  final String type;
-  final String motive;
-  final ProjectStatus status;
-  double progress;
-  final String locationStart;
-  final String locationEnd;
-}
-
-class Finding {
-  Finding({
-    required this.id,
-    required this.category,
-    required this.description,
-    required this.severity,
-    required this.location,
-    required this.date,
-    required this.user,
-    required this.recommendation,
-    required this.status,
-    required this.evidences,
-  });
-  final String id;
-  final String category;
-  final String description;
-  final Severity severity;
-  final String location;
-  final String date;
-  final String user;
-  final String recommendation;
-  FindingStatus status;
-  final int evidences;
 }
 
 /// Un evento listo para la línea de tiempo (ver `describeHistory`).

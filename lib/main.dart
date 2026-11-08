@@ -6,7 +6,7 @@ import 'core/theme/app_theme.dart';
 import 'data/auth/auth_service.dart';
 import 'data/auth/user_directory.dart';
 import 'data/sync/sync_service.dart';
-import 'data/mock_data.dart';
+import 'data/app_state.dart';
 import 'data/survey_store.dart';
 import 'features/auth/login_screen.dart';
 import 'features/shell/home_shell.dart';
@@ -41,7 +41,7 @@ class SolarisApp extends StatelessWidget {
   }
 }
 
-/// Transición de página estándar del prototipo.
+/// Transición de página estándar de la app.
 Route<R> appRoute<R>(Widget page, {bool fullscreenDialog = false}) {
   return PageRouteBuilder<R>(
     fullscreenDialog: fullscreenDialog,

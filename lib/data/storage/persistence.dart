@@ -83,6 +83,7 @@ class Tables {
   static const visitMotives = 'visit_motives';
   static const reviews = 'reviews';
   static const corrections = 'corrections';
+  static const findings = 'findings';
 
   static const all = [
     templates,
@@ -97,6 +98,7 @@ class Tables {
     visitMotives,
     reviews,
     corrections,
+    findings,
   ];
 }
 

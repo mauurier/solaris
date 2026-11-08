@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../mock_data.dart';
+import '../app_state.dart';
 import '../remote_errors.dart';
 import '../storage/persistence.dart';
 import '../survey_store.dart';
@@ -438,7 +438,20 @@ class SyncService extends ChangeNotifier {
     );
     await advance(at, changedAnswers);
 
-    // ----- 5. Revisiones del supervisor y sus correcciones.
+    // ----- 5. Hallazgos.
+    const ft = RemoteTable.findings;
+    final changedFindings = await changed(ft);
+    final missedFindings = again(ft, changedFindings);
+    final findingRows = [
+      ...changedFindings,
+      if (newVisits.isNotEmpty) ...await remote.where(ft, 'id_visita', newVisits),
+      if (missedFindings.isNotEmpty) ...await remote.where(ft, 'id', missedFindings),
+    ].where((r) => store.visit(r['id_visita'] as String) != null).toList();
+    await store.mergeRemote(Tables.findings,
+        rows: alive(findingRows).map(RemoteRows.finding).toList(), removed: deletedIds(findingRows));
+    await advance(ft, changedFindings);
+
+    // ----- 6. Revisiones del supervisor y sus correcciones.
     const rt = RemoteTable.reviews;
     final localReviews = {for (final r in store.reviews) r.id};
     final changedReviews = await changed(rt);
@@ -468,7 +481,7 @@ class SyncService extends ChangeNotifier {
     );
     await advance(ct, changedCorrections);
 
-    // ----- 6. Documentos y evidencias: las filas; los archivos se bajan aparte.
+    // ----- 7. Documentos y evidencias: las filas; los archivos se bajan aparte.
     for (final (t, parentColumn, parents, exists, toLocal) in [
       (RemoteTable.documents, 'id_proyecto', newProjects, (String id) => store.project(id) != null, RemoteRows.document),
       (RemoteTable.evidences, 'id_visita', newVisits, (String id) => store.visit(id) != null, RemoteRows.evidence),

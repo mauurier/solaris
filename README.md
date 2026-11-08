@@ -15,17 +15,19 @@ de la app), así que se trabaja sin señal. Con conexión se sincroniza con
 | **Proyectos** | Alta en 4 pasos (datos, ubicación con GPS, equipo, plantilla y documentos iniciales). Al crear se genera la visita del técnico. Asignación de supervisor y técnicos, visitas adicionales y borrado (admin). |
 | **Documentos** | Recibo CFE, unifilar, ingeniería existente, planos, CAD y otros desde Archivos/iCloud/Drive. Si la plantilla los pide, cuentan como respondidos. |
 | **Levantamiento** | Inicio y cierre con hora y GPS. Formulario generado desde la plantilla: condicionales, bloques repetibles (Transformador 1, 2…; Tablero Principal, Tablero 01…), guardado automático, avance por sección y captura fuera de orden. |
-| **Cámara** | Cada foto lleva impresa la **fecha, hora y coordenadas** (o `SIN GPS`). Revisar, repetir, reemplazar, eliminar y comentar. Video narrado e importación de fotos/videos de dron o termografías. |
+| **Cámara** | Cada foto lleva impresa la **fecha, hora y coordenadas** (o `SIN GPS`). Revisar, repetir, reemplazar, eliminar y comentar. Video narrado e importación de fotos/videos de dron o termografías; los videos se comprimen a 720p al guardarlos. |
 | **Validación** | Pendientes obligatorios (bloquean el cierre), opcionales y justificados por el supervisor. Firma del técnico. |
 | **Plantillas** | Editor para el administrador: secciones, bloques, preguntas, tipo, obligatoriedad, condiciones, carpeta y prefijo de archivo. Cada guardado es una versión nueva; las visitas en curso conservan la suya. |
 | **Exportar ZIP** | Estructura `01`–`06` de *Instrucciones de llenado de carpetas*, nombres automáticos (`TABLERO_PRINCIPAL_ITM_001.jpg`, `RECIBO_CFE_SITIO.pdf`) y CSV de respuestas, mediciones y metadatos de cada evidencia. Se comparte con el menú nativo. |
 | **Cuentas** | Inicio de sesión con Supabase Auth. El superadmin crea las cuentas (Edge Function `crear-usuario`) y cambia rol, vigencia y si están activas. |
 | **Revisión** | El supervisor aprueba la visita terminada o pide correcciones concretas; el técnico las marca como atendidas y no puede cerrar hasta atenderlas todas. Cada revisión queda registrada con sus observaciones. |
+| **Hallazgos** | Problemas encontrados en la visita con código (HZ-001), categoría, severidad, ubicación, recomendación, GPS y fotos. Se les da seguimiento (abierto, en revisión, corregido; sólo quien revisa los cierra) y salen en el ZIP con su CSV. |
+| **Reporte PDF** | Por visita y sin conexión: portada, resumen con hallazgos por severidad, cada hallazgo con sus fotos y cada sección numerada (2.1.3) con su respuesta, casillas, escalas y fotos con autor y hora. Las fotos se reducen para que pese poco. Se comparte con el menú nativo. |
 | **Historial** | Quién cambió qué y cuándo, por proyecto o de todo, leído del registro de Solaris (necesita conexión). |
 | **Sincronización** | Sube sólo lo que cambió en el teléfono y baja lo que cambió en el servidor; si dos personas cambian lo mismo gana el cambio más reciente. Fotos, videos y documentos van a Storage (opción "Sólo con Wi-Fi"). Es automática al volver la conexión, tras cada cambio y cada 10 minutos; Perfil › Sincronización muestra lo pendiente y los errores. |
 
-Reporte PDF y hallazgos siguen como **vista previa con datos de ejemplo**
-(Perfil › Vista previa · próximas fases) mientras se hacen con datos reales.
+La tipografía del reporte PDF es Roboto (`assets/fonts`, licencia Apache 2.0 en
+`ROBOTO_LICENSE.txt`).
 
 ## Cómo ejecutarlo
 
@@ -63,7 +65,7 @@ lib/
 │   ├── auth/                   Sesión, perfil y lista de usuarios
 │   ├── sync/                   Subida, bajada y cola de sincronización
 │   ├── survey_store.dart       Fuente única de datos (ChangeNotifier)
-│   └── mock_data.dart          Sesión y ajustes; datos de ejemplo de la vista previa
+│   └── app_state.dart          Sesión, rol y ajustes del teléfono   
 └── features/
     ├── projects/               Lista, alta, detalle, documentos y asignación
     ├── visits/                 Visita, secciones, preguntas, validación
