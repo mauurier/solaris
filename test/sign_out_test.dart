@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:proyecto_app/data/app_state.dart';
@@ -71,36 +73,81 @@ void main() {
     expect(await tester.runAsync(store.pendingCount), 0);
   });
 
-  testWidgets('si el servidor rechaza algo avisa y se puede cancelar', (tester) async {
+  /// Toca "salir" y espera a que [prepareSignOut] muestre su diálogo o
+  /// conteste.
+  Future<void> tapAndWait(WidgetTester tester, List<bool> answers) async {
+    await tester.tap(find.text('salir'));
+    for (var i = 0; i < 50 && answers.isEmpty && find.byType(AlertDialog).evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+    // Si lo que apareció es "Subiendo cambios", se espera a que termine.
+    for (var i = 0; i < 50 && find.text('Subiendo cambios').evaluate().isNotEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
+      await tester.pump();
+    }
+    await tester.pump();
+  }
+
+  testWidgets('sin conexión no deja cerrar sesión', (tester) async {
     await tester.runAsync(() => store.addClient('TRUPER'));
-    server.onWrite = (table, op) => throw const RemoteRejected('No tienes permiso para cambiar este registro.');
+    SyncService.instance.online = false;
+    addTearDown(() => SyncService.instance.online = true);
 
     final answers = await mount(tester);
-    await tester.tap(find.text('salir'));
-    await tester.pump();
-    await tester.runAsync(() => SyncService.instance.sync());
-    await tester.pumpAndSettle();
+    await tapAndWait(tester, answers);
 
-    expect(find.text('Queda 1 cambio sin subir'), findsOneWidget);
-    expect(find.textContaining('El servidor no aceptó un cambio: No tienes permiso'), findsOneWidget);
-    await tester.tap(find.text('Cancelar'));
+    expect(find.text('Aún no puedes cerrar sesión'), findsOneWidget);
+    expect(find.textContaining('No hay conexión'), findsOneWidget);
+    expect(find.text('Cerrar sesión'), findsNothing, reason: 'no hay forma de salir sin subir');
+    await tester.tap(find.text('Entendido'));
     await tester.pumpAndSettle();
-    expect(answers, [false], reason: 'la sesión sigue abierta para resolverlo');
+    expect(answers, [false]);
+    expect(server.writes, isEmpty);
   });
 
-  testWidgets('con la sincronización pausada no sube, avisa y deja salir', (tester) async {
+  testWidgets('con la sincronización pausada no deja cerrar sesión', (tester) async {
     await tester.runAsync(() => store.addClient('TRUPER'));
     AppState.instance.offlineMode = true;
 
     final answers = await mount(tester);
-    await tester.tap(find.text('salir'));
-    await tester.pumpAndSettle();
+    await tapAndWait(tester, answers);
 
     expect(find.text('Subiendo cambios'), findsNothing);
-    expect(find.text('La sincronización está pausada.'), findsOneWidget);
+    expect(find.textContaining('La sincronización está pausada'), findsOneWidget);
+    expect(find.text('Cerrar sesión'), findsNothing);
+    await tester.tap(find.text('Entendido'));
+    await tester.pumpAndSettle();
+    expect(answers, [false]);
+    expect(server.writes, isEmpty);
+  });
+
+  testWidgets('si se corta la subida no deja cerrar sesión', (tester) async {
+    await tester.runAsync(() => store.addClient('TRUPER'));
+    server.onWrite = (table, op) => throw const SocketException('Sin señal');
+
+    final answers = await mount(tester);
+    await tapAndWait(tester, answers);
+
+    expect(find.text('Aún no puedes cerrar sesión'), findsOneWidget);
+    expect(find.textContaining('Se cortó la subida'), findsOneWidget);
+    expect(find.text('Cerrar sesión'), findsNothing);
+    await tester.tap(find.text('Entendido'));
+    await tester.pumpAndSettle();
+    expect(answers, [false]);
+  });
+
+  testWidgets('si sólo quedan cambios que el servidor rechazó, avisa y deja salir', (tester) async {
+    await tester.runAsync(() => store.addClient('TRUPER'));
+    server.onWrite = (table, op) => throw const RemoteRejected('new row violates row-level security policy');
+
+    final answers = await mount(tester);
+    await tapAndWait(tester, answers);
+
+    expect(find.text('Queda 1 cambio que el servidor rechazó'), findsOneWidget);
+    expect(find.textContaining('El servidor no aceptó un cambio: new row violates'), findsOneWidget);
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pumpAndSettle();
-    expect(answers, [true]);
-    expect(server.writes, isEmpty);
+    expect(answers, [true], reason: 'esa cuenta no lo va a poder subir nunca');
   });
 }

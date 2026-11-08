@@ -175,6 +175,11 @@ class SyncService extends ChangeNotifier {
   bool running = false;
   String? error;
   DateTime? lastPull;
+
+  /// La última sincronización se cortó (sin red, tiempo agotado) antes de
+  /// terminar: lo que no alcanzó a subir todavía se puede subir. A
+  /// diferencia de [failures], que el servidor rechazó.
+  bool interrupted = false;
   Future<void>? _current;
 
   /// Documentos y evidencias que esperan Wi-Fi para subir (ver
@@ -284,6 +289,7 @@ class SyncService extends ChangeNotifier {
     if (AppState.instance.profile == null || AppState.instance.offlineMode || !SurveyStore.isReady) return;
     running = true;
     error = null;
+    interrupted = false;
     notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -313,6 +319,7 @@ class SyncService extends ChangeNotifier {
       _pendingAfterRun = await store.pendingCount();
     } catch (e) {
       error = remoteErrorMessage(e);
+      interrupted = true;
     } finally {
       running = false;
       notifyListeners();
