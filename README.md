@@ -1,92 +1,112 @@
 # Solaris · Levantamientos técnicos fotovoltaicos
 
-Aplicación móvil en Flutter para realizar levantamientos eléctricos de
-instalaciones fotovoltaicas con evidencia fotográfica, validación de pendientes
-y exportación ordenada de la información.
+Aplicación móvil para hacer levantamientos eléctricos de instalaciones
+fotovoltaicas en campo: formulario guiado por plantilla, fotos y videos con
+fecha, hora y GPS impresos, validación de pendientes, revisión del supervisor,
+reporte PDF y exportación ZIP con la estructura de carpetas de la empresa.
 
-Todo se guarda primero en el teléfono (SQLite + archivos en la carpeta privada
-de la app), así que se trabaja sin señal. Con conexión se sincroniza con
-**Solaris**, el proyecto de Supabase (base de datos, Storage y cuentas).
+Está hecha en **Flutter** (un solo código para Android e iOS). La parte nativa
+de Android es mínima: la `MainActivity` y un procesador de video en Kotlin.
 
-## Qué funciona
+Todo se guarda primero en el teléfono (SQLite y archivos en la carpeta privada
+de la app), así que se trabaja sin señal. Con conexión se sincroniza con un
+proyecto de **Supabase** (base de datos PostgreSQL, Storage y cuentas).
+
+## Capturas
+
+| Inicio de sesión | Proyecto | Visita | Cámara |
+|---|---|---|---|
+| <img src="docs/capturas/inicio-sesion.jpg" width="200" alt="Pantalla de inicio de sesión"> | <img src="docs/capturas/proyecto.jpg" width="200" alt="Detalle de un proyecto"> | <img src="docs/capturas/visita.jpg" width="200" alt="Visita en curso con sus secciones"> | <img src="docs/capturas/camara.jpg" width="200" alt="Cámara del levantamiento"> |
+
+## Qué hace
 
 | Módulo | Detalle |
 |---|---|
-| **Proyectos** | Alta en 4 pasos (datos, ubicación con GPS, equipo, plantilla y documentos iniciales). Al crear se genera la visita del técnico. Asignación de supervisor y técnicos, visitas adicionales y borrado (admin). |
-| **Documentos** | Recibo CFE, unifilar, ingeniería existente, planos, CAD y otros desde Archivos/iCloud/Drive. Si la plantilla los pide, cuentan como respondidos. |
-| **Levantamiento** | Inicio y cierre con hora y GPS. Formulario generado desde la plantilla: condicionales, bloques repetibles (Transformador 1, 2…; Tablero Principal, Tablero 01…), guardado automático, avance por sección y captura fuera de orden. |
-| **Cámara** | Cada foto y video lleva impresa la **fecha, hora, coordenadas** (o `SIN GPS`) y el **enlace de Google Maps** de esas coordenadas; en la app, tocar la foto abre Maps y el PDF también enlaza cada foto. Las fotos y videos de la galería se marcan con la hora y ubicación del momento en que se suben. Revisar, repetir, reemplazar, eliminar, comentar y **agregar texto encima** de las fotos. Los videos se procesan con el sistema (AVFoundation en iOS, Media3 en Android) para imprimir la marca y bajarlos a 720p. |
-| **Validación** | Pendientes obligatorios (bloquean el cierre), opcionales y justificados por el supervisor. Firma del técnico. |
-| **Plantillas** | Editor para el administrador: secciones, bloques, preguntas, tipo, obligatoriedad, condiciones, carpeta y prefijo de archivo. Cada guardado es una versión nueva; las visitas en curso conservan la suya. |
-| **Exportar ZIP** | Estructura `01`–`06` de *Instrucciones de llenado de carpetas*, nombres automáticos (`TABLERO_PRINCIPAL_ITM_001.jpg`, `RECIBO_CFE_SITIO.pdf`) y CSV de respuestas, mediciones y metadatos de cada evidencia. Se comparte con el menú nativo. |
-| **Cuentas** | Inicio de sesión con Supabase Auth. El superadmin crea las cuentas (Edge Function `crear-usuario`) y cambia rol, vigencia y si están activas. |
-| **Revisión** | El supervisor aprueba la visita terminada o pide correcciones concretas; el técnico las marca como atendidas y no puede cerrar hasta atenderlas todas. Cada revisión queda registrada con sus observaciones. |
-| **Hallazgos** | Problemas encontrados en la visita con código (HZ-001), categoría, severidad, ubicación, recomendación, GPS y fotos. Se les da seguimiento (abierto, en revisión, corregido; sólo quien revisa los cierra) y salen en el ZIP con su CSV. |
-| **Reporte PDF** | Por visita y sin conexión: portada, resumen con hallazgos por severidad, cada hallazgo con sus fotos y cada sección numerada (2.1.3) con su respuesta, casillas, escalas y fotos con autor, hora y enlace a Maps. Antes de generarlo se elige qué va: resumen, hallazgos, fotos, sólo lo respondido y qué secciones y bloques (Transformador 2, Tablero 01…). Se ve dentro de la app y se comparte con el menú nativo. |
-| **Historial** | Quién cambió qué y cuándo, por proyecto o de todo, leído del registro de Solaris (necesita conexión). |
-| **Sincronización** | Sube sólo lo que cambió en el teléfono y baja lo que cambió en el servidor; si dos personas cambian lo mismo gana el cambio más reciente. Fotos, videos y documentos van a Storage (opción "Sólo con Wi-Fi"). Es automática al volver la conexión, tras cada cambio y cada 10 minutos; Perfil › Sincronización muestra lo pendiente y los errores. |
+| **Cuentas** | Inicio de sesión con Supabase Auth. Cuatro roles: superadmin, administrador, supervisor y técnico. El superadmin crea las cuentas, les pone vigencia (fecha de inicio y fin) y puede desactivarlas o asignarles una contraseña nueva. |
+| **Proyectos** | Alta en 4 pasos (datos, ubicación con GPS, equipo, plantilla y documentos). Al crear se genera la primera visita para el primer técnico asignado. |
+| **Visitas** | Inicio y cierre con hora y GPS. Formulario generado desde la plantilla: preguntas condicionales, bloques repetibles (Transformador 1, 2…), guardado automático y avance por sección. |
+| **Evidencia** | Fotos, videos, documentos y firma. Cada foto y video lleva impresa la fecha, la hora, las coordenadas (o `SIN GPS`) y el enlace de Google Maps. Se puede agregar texto encima de una foto. |
+| **Validación** | Los pendientes obligatorios impiden cerrar la visita; el supervisor puede justificarlos. |
+| **Revisión** | El supervisor aprueba la visita o pide correcciones; el técnico las atiende antes de volver a cerrar. |
+| **Hallazgos** | Problemas encontrados en la visita con código (HZ-001), categoría, severidad, fotos y seguimiento. |
+| **Reporte PDF** | Se genera en el teléfono, sin conexión, eligiendo qué partes incluir. |
+| **Exportar ZIP** | Carpetas `01`–`06`, nombres de archivo automáticos y CSV de respuestas, mediciones, hallazgos y evidencias. |
+| **Plantillas y catálogos** | El administrador edita plantillas (cada guardado es una versión nueva), tipos de proyecto y motivos de visita. |
+| **Historial** | Quién cambió qué y cuándo, leído del servidor (necesita conexión). |
+| **Sincronización** | Automática; sube sólo lo que cambió y respeta "Sólo con Wi-Fi" para los archivos. |
 
-El video se procesa con código nativo propio, en `ios/Runner/VideoWatermark.swift` y
-`android/app/src/main/kotlin/com/example/proyecto_app/VideoWatermark.kt` (canal
-`solaris/video`), en lugar de un plugin.
+## Stack tecnológico
 
-La tipografía del reporte PDF es Roboto (`assets/fonts`, licencia Apache 2.0 en
-`ROBOTO_LICENSE.txt`).
+| Pieza | Versión |
+|---|---|
+| Flutter | Se compiló con 3.47.5 (canal stable). `pubspec.lock` exige `>=3.44.0`. |
+| Dart | SDK `^3.12.1` (`pubspec.yaml`); se compiló con 3.13.4. |
+| Android Gradle Plugin | 9.0.1 (`android/settings.gradle.kts`) |
+| Kotlin (plugin Android) | 2.3.20 |
+| Gradle | 9.1.0 (`android/gradle/wrapper/gradle-wrapper.properties`) |
+| Java / JVM target | 17 |
+| AndroidX Media3 (video nativo) | 1.9.2 |
+| Backend | Supabase (`supabase_flutter` 2.18.3): PostgreSQL con RLS, Storage, Auth y 2 Edge Functions en TypeScript (Deno) |
+| Base local | SQLite (`sqflite` 2.4.4) |
 
-## Cómo ejecutarlo
+La lista completa de librerías está en [docs/dependencias.md](docs/dependencias.md).
+
+## Requisitos
+
+- **Flutter SDK** 3.44.0 o superior (probado con 3.47.5) y su Dart incluido.
+- **JDK 17**: el proyecto Android compila con `JavaVersion.VERSION_17`.
+- **Android SDK** con API 36 (compileSdk y targetSdk). `minSdk` es 24 (Android 7.0).
+- **Android Studio Otter 3 Feature Drop (2025.2.3) o más reciente**, con el
+  plugin de Flutter. Es la primera versión que admite el Android Gradle Plugin
+  9.0 que usa el proyecto. En el equipo de desarrollo se usa Android Studio
+  Quail 3 (2026.1.3).
+- Un **teléfono Android real** para usar la cámara y el GPS; en el emulador la cámara muestra un aviso.
+- Una **cuenta de Solaris** (la crea el superadmin) para iniciar sesión.
+
+El proyecto también trae carpeta `ios/` (requiere iOS 14 o superior), pero esta
+documentación se centra en Android.
+
+## Cómo clonar, configurar y ejecutar
 
 ```bash
+git clone git@github.com:mauurier/solaris.git
+cd solaris
 flutter pub get
-flutter run
+flutter run            # con un teléfono Android conectado
 ```
 
-Requiere iOS 14 o superior y una cuenta de Solaris (la crea el superadmin). La
-cámara y el GPS sólo funcionan en un teléfono real. **Para ejecutar SOLO en android con kotlin hay que copiar o abrir la carpeta /android en android studio.**
+- `android/local.properties` lo genera Flutter con la ruta del SDK (`flutter.sdk`);
+  no se sube al repositorio.
+- La URL y la llave *publishable* de Supabase tienen valores por defecto en
+  `lib/core/config/supabase_config.dart`. Para apuntar a otro proyecto se
+  pasan al compilar:
 
-## Pruebas
+  ```bash
+  flutter run \
+    --dart-define=SUPABASE_URL=https://<project-ref>.supabase.co \
+    --dart-define=SUPABASE_PUBLISHABLE_KEY=<llave-publishable>
+  ```
 
-```bash
-flutter analyze
-flutter test
-```
+- Para abrir sólo la parte nativa de Android, abre la carpeta `android/` en
+  Android Studio.
 
-Las pruebas usan un almacén en memoria y una carpeta temporal; la de SQLite
-usa `sqflite_common_ffi` para abrir una base real en el escritorio.
+Cómo generar el APK o AAB de release y firmarlo:
+[docs/configuracion-y-build.md](docs/configuracion-y-build.md).
 
-## Estructura
+## Documentación
 
-```
-lib/
-├── main.dart                   Abre la base local y arranca la app
-├── core/
-│   ├── services/               GPS, marca de agua, video, Maps, reporte PDF,
-│   │                           exportación ZIP, formatos
-│   ├── theme/                  Tokens de color, tipografía y ThemeData
-│   └── widgets/                Sistema de componentes
-├── data/
-│   ├── survey/                 Plantilla (modelo y plantilla eléctrica FV),
-│   │                           entidades y motor de avance/pendientes
-│   ├── storage/                SQLite, persistencia en memoria y archivos
-│   ├── auth/                   Sesión, perfil y lista de usuarios
-│   ├── sync/                   Subida, bajada y cola de sincronización
-│   ├── survey_store.dart       Fuente única de datos (ChangeNotifier)
-│   └── app_state.dart          Sesión, rol y ajustes del teléfono   
-└── features/
-    ├── projects/               Lista, alta, detalle, documentos y asignación
-    ├── visits/                 Visita, secciones, preguntas, validación
-    ├── capture/                Cámara, visor de evidencias, video, editor de texto
-    ├── export/                 Exportación ZIP (y vista previa anterior)
-    ├── admin/                  Plantillas y su editor; usuarios, clientes y catálogos
-    ├── sync/                   Pantalla de sincronización
-    ├── dashboard/  shell/      Inicio, navegación y captura rápida
-    └── …                       Módulos en vista previa
-```
+| Documento | Contenido |
+|---|---|
+| [docs/arquitectura.md](docs/arquitectura.md) | Patrón, capas, carpetas, flujo de datos, navegación |
+| [docs/pantallas.md](docs/pantallas.md) | Cada pantalla, sus acciones y a dónde lleva |
+| [docs/datos.md](docs/datos.md) | Modelos, SQLite, preferencias, Supabase (tablas, Storage, Edge Functions) |
+| [docs/diagrama-er.md](docs/diagrama-er.md) | Diagrama entidad-relación de la base en Supabase |
+| [docs/configuracion-y-build.md](docs/configuracion-y-build.md) | Configuración, build de release, firma y permisos |
+| [docs/dependencias.md](docs/dependencias.md) | Cada librería, su versión y para qué se usa |
+| [docs/manual-de-usuario.md](docs/manual-de-usuario.md) | Guía para el usuario final |
+| [docs/pruebas.md](docs/pruebas.md) | Pruebas existentes y cómo correrlas |
 
-## Roles
+## Licencia
 
-El rol viene de la cuenta: **Superadmin** (administra cuentas y usa la vista
-del administrador), **Administrador**, **Supervisor** y **Técnico**. El técnico
-sólo ve sus proyectos;
-supervisor y admin crean proyectos y justifican pendientes; el supervisor
-también revisa, solicita correcciones y aprueba o rechaza levantamientos
-(absorbe el antiguo rol de revisor); el admin edita plantillas.
+El proyecto no tiene licencia de uso. La tipografía Roboto que se incluye para
+el reporte PDF es Apache 2.0 (`assets/fonts/ROBOTO_LICENSE.txt`).
