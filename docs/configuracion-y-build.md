@@ -252,3 +252,62 @@ vez, a mano:
    ```
 
 Las demás cuentas las crea el superadmin desde la app (pantalla Usuarios).
+
+## Carpetas generadas y respaldo
+
+### Carpetas que se generan solas
+
+Estas carpetas no están en el repositorio (las excluye `.gitignore`) y se
+vuelven a crear al trabajar con el proyecto. Se pueden borrar o dejar fuera de
+un respaldo sin perder nada:
+
+| Carpeta | Qué es | Cómo se regenera |
+|---|---|---|
+| `build/` | Compilaciones y APKs | Al compilar (`flutter run`, `flutter build apk`) |
+| `.dart_tool/` | Caché de Flutter y de los paquetes | `flutter pub get` |
+| `linux/flutter/ephemeral/`, `windows/flutter/ephemeral/`, `ios/Flutter/ephemeral/`, `macos/Flutter/ephemeral/` | Archivos generados por Flutter para cada plataforma | `flutter pub get` o al compilar |
+| `android/.gradle/` | Caché de Gradle | Al compilar para Android |
+| `android/local.properties` | Rutas locales al SDK de Flutter y de Android | Lo escribe Flutter al compilar |
+| `.idea/` | Preferencias de Android Studio (pestañas, dispositivo elegido) | Android Studio la crea al abrir el proyecto, con su configuración por defecto |
+
+Lo que **no** está en la carpeta del proyecto y hay que instalar o pedir
+aparte: el Flutter SDK, el Android SDK, Android Studio, el JDK y el acceso al
+proyecto de Supabase (ver [README](../README.md#requisitos)).
+
+### Hacer un respaldo
+
+Desde la carpeta que **contiene** al proyecto (en este ejemplo se llama
+`solaris`):
+
+```bash
+tar --exclude=solaris/build --exclude=solaris/.dart_tool \
+    --exclude='solaris/*/flutter/ephemeral' --exclude='solaris/*/Flutter/ephemeral' \
+    --exclude=solaris/android/.gradle --exclude=solaris/.idea \
+    -czf ~/solaris.tar.gz solaris
+```
+
+El archivo resultante pesa unos pocos MB e incluye la carpeta `.git` con todo
+el historial, los commits que aún no se suben a GitHub y los archivos que no
+están en Git. Las carpetas `ephemeral` tienen accesos directos (symlinks) que
+suelen dar error al copiarlos a un NAS o a una unidad de red; por eso se
+excluyen.
+
+### Restaurar un respaldo
+
+```bash
+tar -xzf solaris.tar.gz          # crea la carpeta solaris/
+cd solaris
+flutter pub get
+flutter run                      # o flutter build apk --release
+```
+
+Si al compilar para Android aparece *permission denied*, el almacenamiento
+quitó el permiso de ejecución a `android/gradlew`:
+
+```bash
+chmod +x android/gradlew
+```
+
+No conviene trabajar el proyecto directamente desde un NAS o una carpeta de
+red: Flutter y Gradle son muy lentos ahí y pueden fallar por bloqueos de
+archivos. Copia la carpeta a la computadora para trabajar.
