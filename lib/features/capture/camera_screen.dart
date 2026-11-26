@@ -518,7 +518,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                 child: TextButton.icon(
                   onPressed: _addText,
                   icon: const Icon(Icons.text_fields_rounded, size: 18),
-                  label: const Text('Agregar texto'),
+                  label: const Text('Texto y medidas'),
                 ),
               ),
             ],

@@ -54,7 +54,12 @@ o reanudas el envío de información.
 
 ### Fotos, videos, documentos y firma
 - Toca la cámara en la pregunta. La foto sale con **fecha, hora, ubicación y enlace de Google Maps** impresos.
-- Revisa la foto y elige **aceptar** o **repetir**. Puedes **agregar texto** encima de la foto.
+- Revisa la foto y elige **aceptar** o **repetir**.
+- Con **Texto y medidas** puedes marcar la foto:
+  - **Texto:** toca la foto donde lo quieras, escríbelo y elige color.
+  - **Medida:** una línea con flecha en los dos extremos para señalar una distancia. Escribe el valor si quieres (por ejemplo "1.20 m") y arrastra cada extremo hasta los puntos que mides.
+  - Arrastra un texto o una línea para moverlo. Para cambiar su tamaño, pon dos dedos en cualquier parte de la foto y sepáralos o júntalos: cambia lo último que tocaste.
+  - Toca un texto o una medida para editarlo o borrarlo, y **Listo** para guardar.
 - También puedes subir fotos, videos o documentos que ya tengas en el teléfono. Se marcan con la hora y ubicación del momento en que los subes.
 - Si una foto dice **SIN GPS**, el teléfono no tenía ubicación en ese momento.
 - Para ver una foto ya tomada, tócala. Desde ahí puedes poner un comentario, reemplazarla o borrarla mientras la visita siga abierta. Tocar la foto abre en Maps el lugar donde se tomó.

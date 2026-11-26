@@ -25,7 +25,7 @@ proyecto de **Supabase** (base de datos PostgreSQL, Storage y cuentas).
 | **Cuentas** | Inicio de sesión con Supabase Auth. Cuatro roles: superadmin, administrador, supervisor y técnico. El superadmin crea las cuentas, les pone vigencia (fecha de inicio y fin) y puede desactivarlas o asignarles una contraseña nueva. |
 | **Proyectos** | Alta en 4 pasos (datos, ubicación con GPS, equipo, plantilla y documentos). Al crear se genera la primera visita para el primer técnico asignado. |
 | **Visitas** | Inicio y cierre con hora y GPS. Formulario generado desde la plantilla: preguntas condicionales, bloques repetibles (Transformador 1, 2…), guardado automático y avance por sección. |
-| **Evidencia** | Fotos, videos, documentos y firma. Cada foto y video lleva impresa la fecha, la hora, las coordenadas (o `SIN GPS`) y el enlace de Google Maps. Se puede agregar texto encima de una foto. |
+| **Evidencia** | Fotos, videos, documentos y firma. Cada foto y video lleva impresa la fecha, la hora, las coordenadas (o `SIN GPS`) y el enlace de Google Maps. Sobre una foto se pueden agregar textos y líneas de medida con flecha en los dos extremos. |
 | **Validación** | Los pendientes obligatorios impiden cerrar la visita; el supervisor puede justificarlos. |
 | **Revisión** | El supervisor aprueba la visita o pide correcciones; el técnico las atiende antes de volver a cerrar. |
 | **Hallazgos** | Problemas encontrados en la visita con código (HZ-001), categoría, severidad, fotos y seguimiento. |

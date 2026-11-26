@@ -4,7 +4,7 @@
 
 | Tipo | Dónde | Cuántas |
 |---|---|---|
-| Unitarias y de widgets (Flutter) | `test/` | 17 archivos, 171 casos al ejecutarse (algunos se generan en bucle) |
+| Unitarias y de widgets (Flutter) | `test/` | 17 archivos, 174 casos al ejecutarse (algunos se generan en bucle) |
 | Integración en dispositivo | `integration_test/video_watermark_test.dart` | 1 |
 | Pruebas instrumentadas o unitarias nativas de Android (`androidTest`, JUnit) | — | **No hay** |
 | Pruebas de las Edge Functions o del SQL | — | **No hay** |
@@ -52,7 +52,7 @@ se ejecuta con `flutter test tool/generate_app_icon.dart`.
 | `quick_capture_test.dart` | Captura rápida con una o varias visitas en curso |
 | `breakdown_test.dart` | Indicadores del inicio y desglose de evidencias |
 | `report_test.dart` | PDF con hallazgos, respuestas y muchas fotos; partes elegidas; enlace a Maps |
-| `photo_edit_test.dart` | Texto sobre la foto, reducción de fotos grandes, archivos que no son imagen |
+| `photo_edit_test.dart` | Texto y línea de medida dibujados en la foto; en el editor, pellizcar con los dedos fuera del texto cambia su tamaño y los extremos de una medida se arrastran; reducción de fotos grandes; archivos que no son imagen |
 | `video_test.dart` | Avance del procesamiento de video y respaldo si falla |
 | `history_test.dart` | Textos del historial, agrupación, filtros, sin conexión |
 | `profile_test.dart` | Vigencia de la cuenta, rol de la interfaz, perfil guardado |
@@ -61,10 +61,10 @@ se ejecuta con `flutter test tool/generate_app_icon.dart`.
 
 ## Resultado actual
 
-Ejecución en Linux (Flutter 3.47.5) sobre el commit `2fd3cf5`:
+Ejecución en Linux (Flutter 3.47.5), con el editor de texto y medidas:
 
 - `flutter analyze`: **sin problemas**.
-- `flutter test`: **156 pasan y 15 fallan**.
+- `flutter test`: **159 pasan y 15 fallan**.
 
 Las 15 que fallan son de `screens_smoke_test.dart` (8), `interactions_test.dart`
 (6) y `history_test.dart` (1). La mayoría reportan desbordes de diseño

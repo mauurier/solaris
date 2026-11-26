@@ -309,7 +309,7 @@ class _FindingFormScreenState extends State<FindingFormScreen> {
                 children: [
                   Expanded(child: Text(fmtDateTime(e.capturedAt), style: T.tiny)),
                   if (_editable && _store.files.exists(e.path))
-                    TextButton(onPressed: () => Navigator.pop(ctx, 'text'), child: const Text('Texto')),
+                    TextButton(onPressed: () => Navigator.pop(ctx, 'text'), child: const Text('Texto y medidas')),
                   if (_editable) TextButton(onPressed: () => Navigator.pop(ctx, 'delete'), child: const Text('Borrar')),
                   TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar')),
                 ],

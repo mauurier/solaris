@@ -159,7 +159,7 @@ class _EvidenceViewerScreenState extends State<EvidenceViewerScreen> {
           if (widget.editable && exists && e.kind == EvidenceKind.photo) ...[
             const SizedBox(height: 10),
             AppButton(
-              'Agregar texto',
+              'Texto y medidas',
               icon: Icons.text_fields_rounded,
               kind: AppButtonKind.secondary,
               expand: true,

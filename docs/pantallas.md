@@ -223,11 +223,13 @@ flowchart TD
 ### CameraScreen
 - **Propósito:** tomar fotos o grabar video para una pregunta o un hallazgo.
 - **Muestra:** visor con cuadrícula, estado del GPS y, después de tomar, la vista previa con la marca de agua.
-- **Acciones:** tomar, repetir, aceptar; agregar texto encima; comentario por foto si está activada esa preferencia.
+- **Acciones:** tomar, repetir, aceptar; agregar textos y medidas encima; comentario por foto si está activada esa preferencia.
 - **Navega a:** `PhotoTextEditor`.
 
 ### PhotoTextEditor
-- **Propósito:** poner texto sobre una foto: tocar agrega, arrastrar mueve, pellizcar cambia el tamaño. Al guardar se dibuja en la foto a su resolución real.
+- **Propósito:** marcar una foto con textos y líneas de medida (flecha en los dos extremos y, opcional, el valor al centro).
+- **Acciones:** tocar la foto agrega un texto; "Medida" agrega una línea; arrastrar mueve el elemento tocado o un extremo de la línea; pellizcar con dos dedos en cualquier parte de la foto cambia el tamaño de lo seleccionado (letra o grosor); tocar un elemento lo edita o lo borra.
+- **Guardar:** pantalla y archivo usan el mismo dibujo (`paintAnnotations`); al guardar se dibuja en la foto a su resolución real y se conserva el EXIF (fecha y GPS).
 
 ### EvidenceViewerScreen
 - **Propósito:** ver una evidencia completa.
